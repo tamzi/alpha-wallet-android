@@ -106,3 +106,9 @@ Java_com_alphawallet_app_repository_EthereumNetworkBase_getBSCExplorerKey( JNIEn
     return (*env)->NewStringUTF(env, "");
 #endif
 }
+
+JNIEXPORT jstring JNICALL
+Java_com_alphawallet_app_widget_HomeScreenWidget_WebQuery_getSecondaryCMCKey(JNIEnv *env,
+                                                                             jclass clazz) {
+    // TODO: implement getSecondaryCMCKey()
+}

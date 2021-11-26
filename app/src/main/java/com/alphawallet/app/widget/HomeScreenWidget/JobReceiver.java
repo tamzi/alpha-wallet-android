@@ -1,19 +1,23 @@
-package com.alphawallet.app.entity.tickerwidget;
+package com.alphawallet.app.widget.HomeScreenWidget;
 
 import android.app.job.JobParameters;
+import android.app.job.JobService;
 import android.content.Intent;
 import android.os.Build;
 
-public class JobReceiver {
+import com.alphawallet.app.service.TickerUpdateService;
+
+public class JobReceiver extends JobService
+{
     @Override
     public boolean onStartJob(JobParameters jobParameters)
     {
         try
         {
-            int ordinal = CryptoUpdateService.LOCATION.UPDATE.ordinal();
+            int ordinal = TickerUpdateService.LOCATION.UPDATE.ordinal();
             String xIntent = String.valueOf(ordinal);
 
-            Intent service = new Intent(this, CryptoUpdateService.class);
+            Intent service = new Intent(this, TickerUpdateService.class);
             service.setAction(xIntent);
             if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             {

@@ -1,4 +1,4 @@
-package com.alphawallet.app.entity.tickerwidget;
+package com.alphawallet.app.widget.HomeScreenWidget;
 
 import android.content.Context;
 import android.content.SharedPreferences;

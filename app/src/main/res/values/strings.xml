@@ -820,4 +820,17 @@
     <string name="add_chain_dialog_message">This site is requesting you to enable and switch to the %1$s Chain with chain ID: %2$s. This will reload the page</string>
     <string name="switch_chain_request">Switch Chain Request</string>
     <string name="current">current</string>
+    <string-array name="fiat_currency" translatable="false">
+        <item >USD</item>
+        <item >AUD</item>
+        <item >BRL</item>
+        <item >CAD</item>
+        <item >CNY</item>
+        <item >EUR</item>
+        <item >GBP</item>
+        <item >IDR</item>
+        <item >ILS</item>
+        <item >INR</item>
+        <item >JPY</item>
+    </string-array>
 </resources>

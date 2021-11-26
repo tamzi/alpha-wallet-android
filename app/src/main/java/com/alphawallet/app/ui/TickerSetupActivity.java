@@ -1,9 +1,11 @@
-package xyz.automatons.cryptowidget;
+package com.alphawallet.app.ui;
 
-import static xyz.automatons.cryptowidget.CryptoUpdateService.LOCATION.CRYPTOS_READY;
-import static xyz.automatons.cryptowidget.CryptoUpdateService.LOCATION.UPDATE;
+import static android.appwidget.AppWidgetManager.INVALID_APPWIDGET_ID;
+import static com.alphawallet.app.service.TickerUpdateService.LOCATION.CRYPTOS_READY;
+import static com.alphawallet.app.service.TickerUpdateService.LOCATION.UPDATE;
 
 import android.annotation.SuppressLint;
+import android.appwidget.AppWidgetManager;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Resources;
@@ -15,9 +17,14 @@ import android.widget.Button;
 import android.widget.Spinner;
 import android.widget.TextView;
 
-import androidx.fragment.app.FragmentActivity;
+import androidx.appcompat.app.AppCompatActivity;
 
-import com.alphawallet.app.entity.tickerwidget.CoinList;
+import com.alphawallet.app.R;
+import com.alphawallet.app.widget.HomeScreenWidget.CoinData;
+import com.alphawallet.app.widget.HomeScreenWidget.CoinList;
+import com.alphawallet.app.widget.HomeScreenWidget.WebQuery;
+import com.alphawallet.app.service.TickerUpdateService;
+import com.alphawallet.app.util.Utils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -26,10 +33,8 @@ import java.util.List;
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.schedulers.Schedulers;
-import xyz.automatons.cryptowidget.web.CoinData;
-import xyz.automatons.cryptowidget.web.WebQuery;
 
-public class CryptoTickerActivity extends FragmentActivity
+public class TickerSetupActivity extends AppCompatActivity
 {
     private Button mButtonSave;
     private Button mButtonCancel;
@@ -39,8 +44,7 @@ public class CryptoTickerActivity extends FragmentActivity
 
     private TextView mTextDirections;
     private TextView mTextWidgetStart;
-
-    private static int mWidgetId = 0;
+    private static int mWidgetId = INVALID_APPWIDGET_ID;
     private static int mCryptoIndex = 0;
     private static int mFiatIndex = 0;
 
@@ -52,9 +56,21 @@ public class CryptoTickerActivity extends FragmentActivity
     protected void onCreate(Bundle savedInstanceState)
     {
         super.onCreate(savedInstanceState);
-        String action = getIntent().getAction();
-        setContentView(R.layout.activity_main);
-        mWidgetId = 0;
+
+        Intent intent = getIntent();
+        Bundle extras = intent.getExtras();
+        if (extras != null) {
+            mWidgetId = extras.getInt(
+                    AppWidgetManager.EXTRA_APPWIDGET_ID,
+                    INVALID_APPWIDGET_ID);
+        }
+
+
+        setResult(RESULT_CANCELED);
+        String action = intent.getAction();
+
+        setContentView(R.layout.layout_ticker_widget);
+        mWidgetId = INVALID_APPWIDGET_ID;
 
         mButtonSave = findViewById(R.id.buttonSave);
         mButtonCancel = findViewById(R.id.buttonCancel);
@@ -62,43 +78,42 @@ public class CryptoTickerActivity extends FragmentActivity
         mTextWidgetStart = findViewById(R.id.textStartFromWidget);
         mSpinnerFiat = findViewById(R.id.spinnerFiat);
         mSpinnerCrypto = findViewById(R.id.spinnerCrypto);
-
         //kick off a retrieval of existing cryptos
         boolean gotCryptos = CoinList.loadCryptoList(this);
 
         try
         {
-            if (action != null && action.contains("startWidget"))
+            if (extras != null && action.contains("startWidget"))
             {
-                mWidgetId = Integer.valueOf(action.substring("startWidget".length()));
+                mWidgetId = Integer.parseInt(action.substring("startWidget".length()));
                 //restore previously chosen choices
                 restoreWidgetChoice();
             }
             else
             {
-                appOpenedDirectly();
+                //appOpenedDirectly();
             }
         }
         catch (Exception e)
         {
             e.printStackTrace();
-            appOpenedDirectly();
+           // appOpenedDirectly();
         }
 
         //start service for the first time to initialise the widget
-        Intent service = new Intent(getApplicationContext(), CryptoUpdateService.class);
+        Intent service = new Intent(getApplicationContext(), TickerUpdateService.class);
         service.setAction(String.valueOf(UPDATE.ordinal()));
         getApplicationContext().startService(service);
 
         //schedule first job
-        Util.scheduleJob(getApplicationContext());
+        Utils.scheduleJob(getApplicationContext());
 
         //now display the radio list of currencies and crypto.
         //first display normal currencies
 
         if (!gotCryptos)
         {
-            disposable = new WebQuery().getCoinList(MainActivity.COIN_FETCH_COUNT)
+            disposable = new WebQuery().getCoinList(TickerSetupActivity.COIN_FETCH_COUNT)
                     .map(coinData -> CoinList.populateCryptoList(this, coinData))
                     .subscribeOn(Schedulers.io())
                     .observeOn(AndroidSchedulers.mainThread())
@@ -143,7 +158,7 @@ public class CryptoTickerActivity extends FragmentActivity
         mSpinnerFiat.setVisibility(View.GONE);
 
         TextView tv = findViewById(R.id.textName);
-        tv.setText(R.string.add_widget_message);
+        tv.setText("Add a Crypto Widget to your home screens and open from the widget.");
     }
 
     private void populateCryptoList(CoinData[] coinList)
@@ -174,7 +189,7 @@ public class CryptoTickerActivity extends FragmentActivity
     private void populateFiatCurrencies()
     {
         Resources res = getResources();
-        String[] currencies = res.getStringArray(R.array.currency);
+        String[] currencies = res.getStringArray(R.array.fiat_currency);
 
         List<String> cList = new ArrayList<>(Arrays.asList(currencies));
 
@@ -195,7 +210,7 @@ public class CryptoTickerActivity extends FragmentActivity
     {
         try
         {
-            //get indicies from radio groups
+            //get indices from radio groups
             String titleStr = mSpinnerCrypto.getSelectedItem().toString();
             mCryptoIndex = mSpinnerCrypto.getSelectedItemPosition();
 
@@ -206,7 +221,7 @@ public class CryptoTickerActivity extends FragmentActivity
             mFiatIndex = mSpinnerFiat.getSelectedItemPosition();
 
             Resources res = getResources();
-            String[] currencies = res.getStringArray(R.array.currency);
+            String[] currencies = res.getStringArray(R.array.fiat_currency);
             String fiatSelected = currencies[mFiatIndex];
 
             SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(this);
@@ -217,7 +232,7 @@ public class CryptoTickerActivity extends FragmentActivity
             editor.putString("FIATSTR", fiatSelected);
             editor.commit(); //use commit here because we will be reading this value back in the service update
 
-            Intent bIntent = new Intent(this, CryptoUpdateService.class);
+            Intent bIntent = new Intent(this, TickerUpdateService.class);
             bIntent.setAction(String.valueOf(CRYPTOS_READY.ordinal()));
             bIntent.putExtra("id", 0);
             bIntent.putExtra("state", 0);

@@ -1,7 +1,6 @@
 package com.alphawallet.app.service;
 
-import static com.alphawallet.app.service.CryptoUpdateService.LOCATION.FINAL;
-import static xyz.automatons.cryptowidget.CryptoUpdateService.LOCATION.FINAL;
+import static com.alphawallet.app.service.TickerUpdateService.LOCATION.FINAL;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -24,12 +23,14 @@ import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 
 import com.alphawallet.app.R;
-import com.alphawallet.app.entity.tickerwidget.CoinData;
-import com.alphawallet.app.entity.tickerwidget.CoinList;
-import com.alphawallet.app.entity.tickerwidget.WebQuery;
-import com.alphawallet.app.entity.tickerwidget.WidgetProvider;
+import com.alphawallet.app.widget.HomeScreenWidget.CoinData;
+import com.alphawallet.app.widget.HomeScreenWidget.CoinList;
+import com.alphawallet.app.widget.HomeScreenWidget.TickerWidgetProvider;
+import com.alphawallet.app.widget.HomeScreenWidget.WebQuery;
 import com.alphawallet.app.util.Utils;
 import com.alphawallet.app.widget.CryptoWidget;
+
+import java.util.Locale;
 
 import io.reactivex.disposables.Disposable;
 import io.reactivex.schedulers.Schedulers;
@@ -38,7 +39,7 @@ import io.reactivex.schedulers.Schedulers;
  * Created by James on 24/09/2017.
  */
 
-public class CryptoUpdateService extends Service
+public class TickerUpdateService extends Service
 {
     private Disposable disposable;
 
@@ -146,7 +147,7 @@ public class CryptoUpdateService extends Service
         CoinList.initCoins(this);
 
         AppWidgetManager man = AppWidgetManager.getInstance(this);
-        int[] ids = man.getAppWidgetIds(new ComponentName(this, WidgetProvider.class));
+        int[] ids = man.getAppWidgetIds(new ComponentName(this, TickerWidgetProvider.class));
 
         String fiatSelected = sp.getString("FIATSTR" , "USD"); //Default to USD
 
@@ -179,7 +180,7 @@ public class CryptoUpdateService extends Service
         }
 
         AppWidgetManager man = AppWidgetManager.getInstance(this);
-        int[] ids = man.getAppWidgetIds(new ComponentName(this, WidgetProvider.class));
+        int[] ids = man.getAppWidgetIds(new ComponentName(this, TickerWidgetProvider.class));
 
         for (int widgetId : ids)
         {
@@ -207,13 +208,13 @@ public class CryptoUpdateService extends Service
                 PendingIntent rPI = stackBuilder.getPendingIntent(key.hashCode(), PendingIntent.FLAG_UPDATE_CURRENT);
 
                 RemoteViews remoteViews = new RemoteViews(getApplicationContext().getPackageName(),
-                        R.layout.ticker_widget);
+                        R.layout.layout_ticker_widget);
                 // Set the text
-                String truncValue = String.format(java.util.Locale.US, "%.2f", currentCrypto);
+                String truncValue = String.format(Locale.US, "%.2f", currentCrypto);
 
                 if (currentCrypto < 1 && currentCrypto > 0)
                 {
-                    truncValue = String.format(java.util.Locale.US, "%.4f", currentCrypto);
+                    truncValue = String.format(Locale.US, "%.4f", currentCrypto);
                 }
 
                 remoteViews.setTextViewText(R.id.textCrypto, cryptoName);
@@ -225,7 +226,7 @@ public class CryptoUpdateService extends Service
                 setChange(remoteViews, crypto24h, R.id.text24hChangeGreen, R.id.text24hChangeRed);
                 setChange(remoteViews, crypto7d, R.id.text7dChangeGreen, R.id.text7dChangeRed);
 
-                remoteViews.setOnClickPendingIntent(R.id.relLayout, rPI);
+                remoteViews.setOnClickPendingIntent(R.id.ticker_widget, rPI);
 
                 man.updateAppWidget(widgetId, remoteViews);
             }
@@ -265,15 +266,15 @@ public class CryptoUpdateService extends Service
         {
             remoteViews.setViewVisibility(R.id.textCounterGreen, View.GONE);
             remoteViews.setViewVisibility(R.id.textCounterRed, View.VISIBLE);
-            String diffUnit = getString(R.string.minutes);
+            String diffUnit = "minutes";
             if (timeDiff > 60 * 60 * 24)
             {
-                diffUnit = getString(R.string.days);
+                diffUnit = "days";
                 timeDiff = timeDiff / (60 * 24);
             }
             else if (timeDiff > 60 * 60 * 2)
             {
-                diffUnit = getString(R.string.hours);
+                diffUnit = "hours";
                 timeDiff = timeDiff / 60;
             }
 

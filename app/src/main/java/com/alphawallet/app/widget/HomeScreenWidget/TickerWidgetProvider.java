@@ -1,6 +1,6 @@
-package com.alphawallet.app.entity.tickerwidget;
+package com.alphawallet.app.widget.HomeScreenWidget;
 
-import static com.alphawallet.app.entity.tickerwidget.CryptoUpdateService.LOCATION.ACTION_TOGGLE;
+import static com.alphawallet.app.service.TickerUpdateService.LOCATION.ACTION_TOGGLE;
 
 import android.annotation.SuppressLint;
 import android.app.PendingIntent;
@@ -12,9 +12,10 @@ import android.content.Intent;
 import android.widget.RemoteViews;
 
 import com.alphawallet.app.R;
+import com.alphawallet.app.service.TickerUpdateService;
 import com.alphawallet.app.widget.CryptoWidget;
 
-public class WidgetProvider extends AppWidgetProvider
+public class TickerWidgetProvider extends AppWidgetProvider
 {
     @SuppressLint("NewApi")
     private RemoteViews inflateLayout(Context context, int appWidgetId)
@@ -27,12 +28,12 @@ public class WidgetProvider extends AppWidgetProvider
         stackBuilder.addNextIntent(resultIntent);
         PendingIntent rPI = stackBuilder.getPendingIntent(0,  PendingIntent.FLAG_UPDATE_CURRENT);
 
-        RemoteViews remoteViews = new RemoteViews(context.getPackageName(), R.layout.ticker_widget);
-        remoteViews.setOnClickPendingIntent(R.id.relLayout, rPI);
+        RemoteViews remoteViews = new RemoteViews(context.getPackageName(), R.layout.layout_ticker_widget);
+        remoteViews.setOnClickPendingIntent(R.id.ticker_widget, rPI);
 
         //Call the service
-        Intent service = new Intent(context, CryptoUpdateService.class);
-        service.setAction(String.valueOf(CryptoUpdateService.LOCATION.UPDATE.ordinal()));
+        Intent service = new Intent(context, TickerUpdateService.class);
+        service.setAction(String.valueOf(TickerUpdateService.LOCATION.UPDATE.ordinal()));
         context.startService(service);
 
         return remoteViews;
@@ -75,14 +76,14 @@ public class WidgetProvider extends AppWidgetProvider
         stackBuilder.addParentStack(CryptoWidget.class);
         stackBuilder.addNextIntent(resultIntent);
         PendingIntent rPI = stackBuilder.getPendingIntent(0,  PendingIntent.FLAG_UPDATE_CURRENT);
-        remoteView.setOnClickPendingIntent(R.id.relLayout, rPI);
+        remoteView.setOnClickPendingIntent(R.id.ticker_widget, rPI);
         appWidgetManager.updateAppWidget(appWidgetId, remoteView);
     }
 
     private RemoteViews getRemoteViewFromState(Context context, int widgetId)
     {
         RemoteViews remoteView = inflateLayout(context, widgetId);
-        Intent startIntent = new Intent(context, CryptoUpdateService.class);
+        Intent startIntent = new Intent(context, TickerUpdateService.class);
         startIntent.setAction(String.valueOf(ACTION_TOGGLE.ordinal()));
         return remoteView;
     }

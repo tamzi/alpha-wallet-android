@@ -12,10 +12,11 @@ https://android.googlesource.com/platform/frameworks/support/+/tools_r22.2/v7/
 There is no commandline tool to converts SVG to VectorDrawable XML or java code
 -->
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/relLayout"
+    android:id="@+id/ticker_widget"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/background_round_grey">
+    android:background="@drawable/background_round_grey"
+    >
 
 
     <TextView
