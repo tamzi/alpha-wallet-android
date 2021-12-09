@@ -13,11 +13,10 @@
 
     <com.alphawallet.app.widget.TokenIcon
         android:id="@+id/token_icon"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="@dimen/token_icon"
+        android:layout_height="@dimen/token_icon"
         android:layout_gravity="center"
-        android:layout_marginEnd="@dimen/dp10"
-        app:showStatus="false" />
+        android:layout_marginEnd="@dimen/dp10" />
 
     <RelativeLayout
         android:layout_width="match_parent"
@@ -38,6 +37,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/font_regular"
+                android:textColor="@color/text_dark_gray"
                 android:maxLines="2"
                 android:textAppearance="?attr/textAppearanceListItem"
                 android:textSize="@dimen/sp17"
@@ -86,6 +86,7 @@
             android:fontFamily="@font/font_regular"
             android:maxLines="1"
             android:textAppearance="?attr/textAppearanceListItem"
+            android:textColor="@color/text_dark_gray"
             android:textSize="12sp"
             android:visibility="visible"
             tools:text="+1.0 ETH" />

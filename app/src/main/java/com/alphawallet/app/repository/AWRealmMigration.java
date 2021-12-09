@@ -1,10 +1,15 @@
 package com.alphawallet.app.repository;
 
+import com.alphawallet.app.repository.entity.RealmGasSpread;
+
 import io.realm.DynamicRealm;
+import io.realm.DynamicRealmObject;
 import io.realm.FieldAttribute;
 import io.realm.RealmMigration;
+import io.realm.RealmObject;
 import io.realm.RealmObjectSchema;
 import io.realm.RealmSchema;
+import io.realm.annotations.PrimaryKey;
 
 
 /**
@@ -254,6 +259,127 @@ public class AWRealmMigration implements RealmMigration
         {
             RealmObjectSchema realmData = schema.get("RealmERC721Asset");
             if (realmData != null && !realmData.hasField("imageThumbnailUrl")) realmData.addField("imageThumbnailUrl", String.class);
+            oldVersion++;
+        }
+
+        if (oldVersion == 24)
+        {
+            RealmObjectSchema realmData = schema.get("RealmNFTAsset");
+            if (realmData == null)
+            {
+                schema.create("RealmNFTAsset")
+                        .addField("tokenIdAddr", String.class, FieldAttribute.PRIMARY_KEY)
+                        .addField("metaData", String.class);
+            }
+            oldVersion++;
+        }
+
+        if (oldVersion == 25)
+        {
+            schema.remove("RealmERC721Asset");
+            oldVersion++;
+        }
+
+        if (oldVersion == 26)
+        {
+            RealmObjectSchema realmData = schema.get("RealmNFTAsset");
+            if (realmData != null && !realmData.hasField("balance")) realmData.addField("balance", String.class);
+            oldVersion++;
+        }
+
+        if (oldVersion == 27)
+        {
+            RealmObjectSchema realmData = schema.get("RealmNFTAsset");
+            if (realmData != null && !realmData.hasField("balance")) realmData.addField("balance", String.class);
+            RealmObjectSchema realmToken = schema.get("RealmToken");
+            if (realmToken != null)
+            {
+                if (realmToken.hasField("erc1155BlockRead"))
+                {
+                    realmToken.removeField("erc1155BlockRead");
+                }
+                if (!realmToken.hasField("erc1155BlockRead"))
+                {
+                    realmToken.addField("erc1155BlockRead", String.class);
+                }
+            }
+            oldVersion++;
+        }
+
+        if (oldVersion == 28)
+        {
+            RealmObjectSchema realmData = schema.get("RealmTransaction");
+            if (realmData != null && !realmData.hasField("contractAddress")) realmData.addField("contractAddress", String.class);
+            oldVersion++;
+        }
+
+        if (oldVersion == 29 || oldVersion == 30)
+        {
+            oldVersion = 31;
+        }
+
+        if (oldVersion == 31)
+        {
+            schema.remove("RealmGasSpread");
+            schema.create("RealmGasSpread")
+                    .addField("chainId", int.class, FieldAttribute.PRIMARY_KEY)
+                    .addField("timeStamp", long.class)
+                    .addField("rapid", String.class)
+                    .addField("fast", String.class)
+                    .addField("standard", String.class)
+                    .addField("slow", String.class)
+                    .addField("baseFee", String.class);
+            oldVersion++;
+        }
+
+        if (oldVersion == 32 || oldVersion == 33)
+        {
+            RealmObjectSchema realmData = schema.get("RealmWalletData");
+            if (realmData != null && !realmData.hasField("ENSAvatar"))
+            {
+                realmData.addField("ENSAvatar", String.class);
+            }
+            oldVersion++;
+        }
+
+        if (oldVersion == 34)
+        {
+            RealmObjectSchema realmData = schema.get("RealmToken");
+            realmData.addField("temp_chainId", long.class)
+                    .transform(obj -> obj.setLong("temp_chainId", (long)obj.getInt("chainId")))
+                    .removeField("chainId")
+                    .renameField("temp_chainId", "chainId");
+
+            realmData = schema.get("RealmAuxData");
+            realmData.addField("temp_chainId", long.class)
+                    .transform(obj -> obj.setLong("temp_chainId", (long)obj.getInt("chainId")))
+                    .removeField("chainId")
+                    .renameField("temp_chainId", "chainId");
+
+            realmData = schema.get("RealmGasSpread");
+            realmData.addField("temp_chainId", long.class)
+                    .transform(obj -> obj.setLong("temp_chainId", (long)obj.getInt("chainId")))
+                    .removeField("chainId")
+                    .renameField("temp_chainId", "chainId")
+                    .addPrimaryKey("chainId");
+
+            realmData = schema.get("RealmTransaction");
+            realmData.addField("temp_chainId", long.class)
+                    .transform(obj -> obj.setLong("temp_chainId", (long)obj.getInt("chainId")))
+                    .removeField("chainId")
+                    .renameField("temp_chainId", "chainId");
+
+            realmData = schema.get("RealmWCSession");
+            realmData.addField("temp_chainId", long.class)
+                    .transform(obj -> obj.setLong("temp_chainId", (long)obj.getInt("chainId")))
+                    .removeField("chainId")
+                    .renameField("temp_chainId", "chainId");
+
+            oldVersion++;
+        }
+
+        if (oldVersion == 35)
+        {
             oldVersion++;
         }
     }

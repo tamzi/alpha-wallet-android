@@ -7,6 +7,7 @@ import android.text.TextUtils;
 import androidx.annotation.NonNull;
 
 import com.alphawallet.app.entity.ContractType;
+import com.alphawallet.app.repository.EthereumNetworkBase;
 import com.alphawallet.app.repository.EthereumNetworkRepository;
 import com.alphawallet.app.repository.TokensRealmSource;
 import com.alphawallet.app.service.AssetDefinitionService;
@@ -30,7 +31,7 @@ public class TokenCardMeta implements Comparable<TokenCardMeta>, Parcelable
      */
     public boolean isEnabled = false;
 
-    public TokenCardMeta(int chainId, String tokenAddress, String balance, long timeStamp, AssetDefinitionService svs, String name, String symbol, ContractType type)
+    public TokenCardMeta(long chainId, String tokenAddress, String balance, long timeStamp, AssetDefinitionService svs, String name, String symbol, ContractType type)
     {
         this.tokenId = TokensRealmSource.databaseKey(chainId, tokenAddress);
         this.lastUpdate = timeStamp;
@@ -39,7 +40,7 @@ public class TokenCardMeta implements Comparable<TokenCardMeta>, Parcelable
         this.balance = balance;
     }
 
-    public TokenCardMeta(int chainId, String tokenAddress, String balance, long timeStamp, long lastTxUpdate, ContractType type)
+    public TokenCardMeta(long chainId, String tokenAddress, String balance, long timeStamp, long lastTxUpdate, ContractType type)
     {
         this.tokenId = TokensRealmSource.databaseKey(chainId, tokenAddress);
         this.lastUpdate = timeStamp;
@@ -57,6 +58,7 @@ public class TokenCardMeta implements Comparable<TokenCardMeta>, Parcelable
         this.type = token.getInterfaceSpec();
         this.nameWeight = 1000;
         this.balance = token.balance.toString();
+        this.isEnabled = true;
     }
 
     protected TokenCardMeta(Parcel in)
@@ -102,13 +104,18 @@ public class TokenCardMeta implements Comparable<TokenCardMeta>, Parcelable
         return !balance.equals("0");
     }
 
-    public int getChain()
+    public boolean hasValidName()
+    {
+        return nameWeight < Integer.MAX_VALUE;
+    }
+
+    public long getChain()
     {
         int chainPos = tokenId.lastIndexOf('-') + 1;
         if (chainPos < tokenId.length())
         {
             String chainStr = tokenId.substring(chainPos);
-            return Integer.parseInt(chainStr);
+            return Long.parseLong(chainStr);
         }
         else
         {
@@ -116,7 +123,7 @@ public class TokenCardMeta implements Comparable<TokenCardMeta>, Parcelable
         }
     }
 
-    public static int calculateTokenNameWeight(int chainId, String tokenAddress, AssetDefinitionService svs, String tokenName, String symbol, boolean isEth)
+    public static int calculateTokenNameWeight(long chainId, String tokenAddress, AssetDefinitionService svs, String tokenName, String symbol, boolean isEth)
     {
         int weight = 1000; //ensure base eth types are always displayed first
         String name = svs != null ? svs.getTokenName(chainId, tokenAddress, 1) : null;
@@ -135,7 +142,7 @@ public class TokenCardMeta implements Comparable<TokenCardMeta>, Parcelable
         }
         else if (isEth)
         {
-            return chainId + 1;
+            return 1 + EthereumNetworkBase.getChainOrdinal(chainId);
         }
 
         if (TextUtils.isEmpty(name)) return Integer.MAX_VALUE;
@@ -217,6 +224,7 @@ public class TokenCardMeta implements Comparable<TokenCardMeta>, Parcelable
             case ERC721:
             case ERC875_LEGACY:
             case ERC875:
+            case ERC1155:
             case ERC721_LEGACY:
             case ERC721_TICKET:
             case ERC721_UNDETERMINED:
@@ -228,39 +236,20 @@ public class TokenCardMeta implements Comparable<TokenCardMeta>, Parcelable
     {
         float updateWeight = 0;
         //calculate balance update time
-        if (nameWeight < Integer.MAX_VALUE)
+        if (hasValidName())
         {
-            if (type == ContractType.ERC721 || type == ContractType.ERC721_LEGACY || type == ContractType.ERC721_TICKET)
+            if (isNFT())
             {
                 //ERC721 types which usually get their balance from opensea. Still need to check the balance for stale tokens to spot a positive -> zero balance transition
-                updateWeight = 0.3f; // 100 seconds
+                updateWeight = 0.25f;
             }
-            else if (EthereumNetworkRepository.hasRealValue(getChain()))
+            else if (isEnabled)
             {
-                if (isEthereum() || hasPositiveBalance())
-                {
-                    updateWeight = 1.0f; //30 seconds
-                }
-                else
-                {
-                    updateWeight = 0.5f; //1 minute
-                }
+                updateWeight = hasPositiveBalance() ? 1.0f : 0.5f; //30 seconds
             }
             else
             {
-                //testnet: TODO: check time since last transaction - if greater than 1 month slow update further
-                if (isEthereum())
-                {
-                    updateWeight = 0.5f; //1 minute
-                }
-                else if (hasPositiveBalance())
-                {
-                    updateWeight = 0.3f; //100 seconds
-                }
-                else
-                {
-                    updateWeight = 0.1f; //5 minutes
-                }
+                updateWeight = 0.25f; //1 minute
             }
         }
         return updateWeight;

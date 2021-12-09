@@ -3,18 +3,18 @@ package com.alphawallet.app.entity.tokens;
 import android.text.TextUtils;
 
 import com.alphawallet.app.entity.ContractType;
-import com.alphawallet.app.entity.opensea.Asset;
 import com.alphawallet.app.repository.entity.RealmToken;
 import com.alphawallet.app.util.Utils;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 
 /**
  * Created by James on 27/01/2018.
+ *
+ * TODO: Convert to builder model
  */
 
 public class TokenFactory
@@ -39,11 +39,16 @@ public class TokenFactory
                 {
                     tokenInfo = new TokenInfo(tokenInfo.address, tokenInfo.name, tokenInfo.symbol, 0, tokenInfo.isEnabled, tokenInfo.chainId);
                 }
-                thisToken = new ERC721Token(tokenInfo, new HashMap<>(), balance, updateBlancaTime, networkName, type);
+                thisToken = new ERC721Token(tokenInfo, null, balance, updateBlancaTime, networkName, type);
                 if (balance.compareTo(BigDecimal.ZERO) >=0)
                 {
                     thisToken.balance = balance;
                 }
+                break;
+            case ERC1155:
+                tokenInfo = new TokenInfo(tokenInfo.address, tokenInfo.name, tokenInfo.symbol, 0, tokenInfo.isEnabled, tokenInfo.chainId);
+                thisToken = new ERC1155Token(tokenInfo, null, updateBlancaTime, networkName);
+                thisToken.balance = balance;
                 break;
             case NOT_SET:
             case ERC20:
@@ -120,6 +125,10 @@ public class TokenFactory
                 thisToken = new ERC721Token(tokenInfo, null, decimalBalance, updateBlancaTime, networkName, type);
                 break;
 
+            case ERC1155:
+                thisToken = new ERC1155Token(tokenInfo, null, updateBlancaTime, networkName);
+                break;
+
             case OTHER:
             default:
                 thisToken = new Token(tokenInfo, BigDecimal.ZERO, updateBlancaTime, networkName, type);
@@ -148,7 +157,7 @@ public class TokenFactory
             case ERC721:
             case ERC721_LEGACY:
             case ERC721_UNDETERMINED:
-                thisToken = new ERC721Token(tokenInfo, new HashMap<>(), BigDecimal.ZERO, currentTime, networkName, type);
+                thisToken = new ERC721Token(tokenInfo, null, BigDecimal.ZERO, currentTime, networkName, type);
                 break;
             case ETHEREUM:
                 String[] split = tokenInfo.address.split("-");
@@ -161,6 +170,9 @@ public class TokenFactory
                                       tokenInfo.chainId),
                         BigDecimal.ZERO, currentTime, networkName, type);
                 thisToken.pendingBalance = BigDecimal.ZERO;
+                break;
+            case ERC1155:
+                thisToken = new ERC1155Token(tokenInfo, null, currentTime, networkName);
                 break;
             case ERC20:
             case DYNAMIC_CONTRACT:

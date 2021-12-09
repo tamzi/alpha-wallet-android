@@ -32,5 +32,7 @@ public enum TransactionType
     BURN,
     MINT,
     COMMIT_NFT,
-    ILLEGAL_VALUE;
+    SAFE_TRANSFER,
+    SAFE_BATCH_TRANSFER,
+    ILLEGAL_VALUE
 }

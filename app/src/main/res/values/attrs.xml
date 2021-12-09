@@ -33,6 +33,9 @@
     <declare-styleable name="ERC721ImageView">
         <attr name="webview_height" format="integer"/>
     </declare-styleable>
+    <declare-styleable name="StandardHeader">
+        <attr name="headerText" format="string"/>
+    </declare-styleable>
     <declare-styleable name="InputView">
         <attr name="label" format="integer" />
         <attr name="imeOptions" format="string" />
@@ -47,6 +50,7 @@
         <attr name="show_allFunds" format="boolean" />
         <attr name="show_paste" format="boolean" />
         <attr name="font_size" format="integer" />
+        <attr name="invert" format="boolean" />
     </declare-styleable>
     <declare-styleable name="CopyTextView">
         <attr name="text" format="string" />
@@ -70,9 +74,5 @@
         <attr name="squaredFinder" format="boolean" />
         <attr name="borderAlpha" format="float" />
         <attr name="finderOffset" format="dimension" />
-    </declare-styleable>
-    <declare-styleable name="TokenIcon">
-        <attr name="showStatus" format="boolean" />
-        <attr name="largeIcon" format="boolean" />
     </declare-styleable>
 </resources>

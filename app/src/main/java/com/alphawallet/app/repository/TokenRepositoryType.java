@@ -4,7 +4,7 @@ import com.alphawallet.app.entity.ContractLocator;
 import com.alphawallet.app.entity.ContractType;
 import com.alphawallet.app.entity.TransferFromEventResponse;
 import com.alphawallet.app.entity.Wallet;
-import com.alphawallet.app.entity.opensea.Asset;
+import com.alphawallet.app.entity.nftassets.NFTAsset;
 import com.alphawallet.app.entity.tokens.Token;
 import com.alphawallet.app.entity.tokens.TokenCardMeta;
 import com.alphawallet.app.entity.tokens.TokenInfo;
@@ -16,7 +16,6 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.List;
 
-import io.reactivex.Completable;
 import io.reactivex.Observable;
 import io.reactivex.Single;
 import io.realm.Realm;
@@ -25,47 +24,45 @@ public interface TokenRepositoryType {
 
     Observable<Token> fetchActiveTokenBalance(String walletAddress, Token token);
     Single<BigDecimal> updateTokenBalance(String walletAddress, Token token);
-    Single<ContractLocator> getTokenResponse(String address, int chainId, String method);
+    Single<ContractLocator> getTokenResponse(String address, long chainId, String method);
     Single<Token[]> checkInterface(Token[] tokens, Wallet wallet);
-    Completable setEnable(Wallet wallet, Token token, boolean isEnabled);
-    Completable setVisibilityChanged(Wallet wallet, Token token);
-    Single<TokenInfo> update(String address, int chainId);
+    void setEnable(Wallet wallet, Token token, boolean isEnabled);
+    void setVisibilityChanged(Wallet wallet, Token token);
+    Single<TokenInfo> update(String address, long chainId);
     Observable<TransferFromEventResponse> burnListenerObservable(String contractAddress);
-    Single<Token> addToken(Wallet wallet, TokenInfo tokenInfo, ContractType interfaceSpec);
-    Single<TokenTicker> getEthTicker(int chainId);
+    Single<TokenTicker> getEthTicker(long chainId);
     TokenTicker getTokenTicker(Token token);
-    Single<BigInteger> fetchLatestBlockNumber(int chainId);
-    Token fetchToken(int chainId, String walletAddress, String address);
-    void createBaseNetworkTokens(String walletAddress);
+    Single<BigInteger> fetchLatestBlockNumber(long chainId);
+    Token fetchToken(long chainId, String walletAddress, String address);
+    String getTokenImageUrl(long chainId, String address);
 
     Single<Token[]> storeTokens(Wallet wallet, Token[] tokens);
-    Single<String> resolveENS(int chainId, String address);
+    Single<String> resolveENS(long chainId, String address);
     void updateAssets(String wallet, Token erc721Token, List<BigInteger> additions, List<BigInteger> removals);
-    void storeAsset(String currentAddress, Token token, Asset asset);
-    Token[] initERC721Assets(Wallet wallet, Token[] token);
+    void storeAsset(String currentAddress, Token token, BigInteger tokenId, NFTAsset asset);
+    Token[] initNFTAssets(Wallet wallet, Token[] token);
 
     Single<ContractType> determineCommonType(TokenInfo tokenInfo);
-    Token updateTokenType(Token token, Wallet wallet, ContractType type);
 
     Single<Boolean> fetchIsRedeemed(Token token, BigInteger tokenId);
 
-    void addImageUrl(int networkId, String address, String imageUrl);
+    void addImageUrl(long chainId, String address, String imageUrl);
 
-    Single<TokenCardMeta[]> fetchTokenMetas(Wallet wallet, List<Integer> networkFilters,
+    Single<TokenCardMeta[]> fetchTokenMetas(Wallet wallet, List<Long> networkFilters,
                                             AssetDefinitionService svs);
 
-    Single<TokenCardMeta[]> fetchAllTokenMetas(Wallet wallet, List<Integer> networkFilters,
+    Single<TokenCardMeta[]> fetchAllTokenMetas(Wallet wallet, List<Long> networkFilters,
                                             String searchTerm);
 
-    Single<Token[]> fetchTokensThatMayNeedUpdating(String walletAddress, List<Integer> networkFilters);
-    Single<ContractAddress[]> fetchAllTokensWithBlankName(String walletAddress, List<Integer> networkFilters);
+    Single<Token[]> fetchTokensThatMayNeedUpdating(String walletAddress, List<Long> networkFilters);
+    Single<ContractAddress[]> fetchAllTokensWithBlankName(String walletAddress, List<Long> networkFilters);
 
-    TokenCardMeta[] fetchTokenMetasForUpdate(Wallet wallet, List<Integer> networkFilters);
+    TokenCardMeta[] fetchTokenMetasForUpdate(Wallet wallet, List<Long> networkFilters);
 
     Realm getRealmInstance(Wallet wallet);
     Realm getTickerRealmInstance();
 
-    Single<BigDecimal> fetchChainBalance(String walletAddress, int chainId);
+    Single<BigDecimal> fetchChainBalance(String walletAddress, long chainId);
     Single<Integer> fixFullNames(Wallet wallet, AssetDefinitionService svs);
     
     boolean isEnabled(Token newToken);

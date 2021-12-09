@@ -1,5 +1,10 @@
 package com.alphawallet.app.service;
 
+import static com.alphawallet.app.repository.TokenRepository.getWeb3jService;
+import static com.alphawallet.app.repository.TokensRealmSource.IMAGES_DB;
+import static com.alphawallet.token.tools.TokenDefinition.TOKENSCRIPT_CURRENT_SCHEMA;
+import static com.alphawallet.token.tools.TokenDefinition.TOKENSCRIPT_REPO_SERVER;
+
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageInfo;
@@ -20,14 +25,13 @@ import com.alphawallet.app.entity.ContractType;
 import com.alphawallet.app.entity.FragmentMessenger;
 import com.alphawallet.app.entity.TokenLocator;
 import com.alphawallet.app.entity.Wallet;
-import com.alphawallet.app.entity.opensea.Asset;
+import com.alphawallet.app.entity.nftassets.NFTAsset;
 import com.alphawallet.app.entity.tokens.ERC721Token;
 import com.alphawallet.app.entity.tokens.Token;
 import com.alphawallet.app.entity.tokens.TokenFactory;
 import com.alphawallet.app.entity.tokenscript.EventUtils;
 import com.alphawallet.app.entity.tokenscript.TokenScriptFile;
 import com.alphawallet.app.entity.tokenscript.TokenscriptFunction;
-import com.alphawallet.app.repository.EthereumNetworkRepositoryType;
 import com.alphawallet.app.repository.TokenLocalSource;
 import com.alphawallet.app.repository.TokensRealmSource;
 import com.alphawallet.app.repository.TransactionRepositoryType;
@@ -35,7 +39,6 @@ import com.alphawallet.app.repository.entity.RealmAuxData;
 import com.alphawallet.app.repository.entity.RealmCertificateData;
 import com.alphawallet.app.repository.entity.RealmTokenScriptData;
 import com.alphawallet.app.ui.HomeActivity;
-import com.alphawallet.app.ui.widget.entity.IconItem;
 import com.alphawallet.app.util.Utils;
 import com.alphawallet.app.viewmodel.HomeViewModel;
 import com.alphawallet.token.entity.Attribute;
@@ -66,7 +69,6 @@ import org.web3j.protocol.core.methods.request.EthFilter;
 import org.web3j.protocol.core.methods.response.EthBlock;
 import org.web3j.protocol.core.methods.response.EthLog;
 import org.web3j.protocol.core.methods.response.Log;
-import org.xml.sax.SAXException;
 
 import java.io.BufferedOutputStream;
 import java.io.File;
@@ -101,8 +103,6 @@ import io.reactivex.Observable;
 import io.reactivex.Single;
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.disposables.Disposable;
-import io.reactivex.internal.operators.parallel.ParallelRunOn;
-import io.reactivex.observers.DisposableCompletableObserver;
 import io.reactivex.schedulers.Schedulers;
 import io.realm.Realm;
 import io.realm.RealmResults;
@@ -111,11 +111,6 @@ import io.realm.exceptions.RealmException;
 import io.realm.exceptions.RealmPrimaryKeyConstraintException;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
-
-import static com.alphawallet.app.repository.TokenRepository.getWeb3jService;
-import static com.alphawallet.app.repository.TokensRealmSource.IMAGES_DB;
-import static com.alphawallet.token.tools.TokenDefinition.TOKENSCRIPT_CURRENT_SCHEMA;
-import static com.alphawallet.token.tools.TokenDefinition.TOKENSCRIPT_REPO_SERVER;
 
 
 /**
@@ -140,11 +135,10 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
     private FileObserver fileObserverQ;                    //Observer for Android Q directory
     private final NotificationService notificationService;
     private final RealmManager realmManager;
-    private final EthereumNetworkRepositoryType ethereumNetworkRepository;
     private final TokensService tokensService;
     private final TokenLocalSource tokenLocalSource;
     private final AlphaWalletService alphaWalletService;
-    private final TransactionRepositoryType transactionRespository;
+    private final TransactionRepositoryType transactionRepository;
     private TokenDefinition cachedDefinition = null;
     private final ConcurrentHashMap<String, EventDefinition> eventList = new ConcurrentHashMap<>(); //List of events built during file load
     private final Semaphore assetLoadingLock;  // used to block if someone calls getAssetDefinitionASync() while loading
@@ -162,7 +156,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
     *  This is shorthand in the project to indicate this is a singleton that other classes inject.
     *  This is the design pattern of the app. See class RepositoriesModule for constructors which are called at App init only */
     public AssetDefinitionService(OkHttpClient client, Context ctx, NotificationService svs,
-                                  RealmManager rm, EthereumNetworkRepositoryType eth, TokensService tokensService,
+                                  RealmManager rm, TokensService tokensService,
                                   TokenLocalSource trs, TransactionRepositoryType trt,
                                   AlphaWalletService alphaService)
     {
@@ -171,12 +165,11 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         assetChecked = new ConcurrentHashMap<>();
         notificationService = svs;
         realmManager = rm;
-        ethereumNetworkRepository = eth;
         alphaWalletService = alphaService;
         this.tokensService = tokensService;
         tokenscriptUtility = new TokenscriptFunction() { }; //no overridden functions
         tokenLocalSource = trs;
-        transactionRespository = trt;
+        transactionRepository = trt;
         assetLoadingLock = new Semaphore(1);
         eventConnection = new Semaphore(1);
         //deleteAllEventData();
@@ -199,7 +192,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         }
         catch (InterruptedException e)
         {
-            e.printStackTrace();
+            if (BuildConfig.DEBUG) e.printStackTrace();
         }
 
         List<String> handledHashes = checkRealmScriptsForChanges();
@@ -260,7 +253,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         }
         catch (Exception e)
         {
-            e.printStackTrace();
+            if (BuildConfig.DEBUG) e.printStackTrace();
         }
 
         return handledHashes;
@@ -337,7 +330,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         }
         catch (Exception e)
         {
-            e.printStackTrace();
+            if (BuildConfig.DEBUG) e.printStackTrace();
         }
     }
 
@@ -354,9 +347,9 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
 
     private void deleteAllInternalScriptFromRealm()
     {
-        try
+        try (Realm realm = realmManager.getRealmInstance(ASSET_DEFINITION_DB))
         {
-            realmManager.getRealmInstance(ASSET_DEFINITION_DB).executeTransactionAsync(r -> {
+            realm.executeTransactionAsync(r -> {
                 //have to remove all instances of this hash
                 RealmResults<RealmTokenScriptData> hashInstances = r.where(RealmTokenScriptData.class)
                         .equalTo("fileHash", BUNDLED_SCRIPT)
@@ -366,7 +359,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         }
         catch (Exception e)
         {
-            e.printStackTrace();
+            if (BuildConfig.DEBUG) e.printStackTrace();
         }
     }
 
@@ -413,13 +406,13 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         }
         catch (Exception e)
         {
-            e.printStackTrace();
+            if (BuildConfig.DEBUG) e.printStackTrace();
         }
 
         return td;
     }
 
-    private String getTSDataKey(int chainId, String address)
+    private String getTSDataKey(long chainId, String address)
     {
         return address + "-" + chainId;
     }
@@ -491,7 +484,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         }
         catch (Exception e)
         {
-            e.printStackTrace();
+            if (BuildConfig.DEBUG) e.printStackTrace();
         }
 
         if (fileList.size() == 0) finishLoading();
@@ -559,7 +552,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
     }
 
     @Override
-    public long getLastTokenUpdate(int chainId, String address)
+    public long getLastTokenUpdate(long chainId, String address)
     {
         long txUpdateTime = 0;
         Token token = tokensService.getToken(chainId, address);
@@ -569,14 +562,14 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         }
 
         return txUpdateTime;
-    };
+    }
 
     @Override
     public Attribute fetchAttribute(ContractInfo origin, String attributeName)
     {
         String addr = null;
         TokenDefinition td = null;
-        int chainId = origin.addresses.keySet().iterator().next();
+        long chainId = origin.addresses.keySet().iterator().next();
         if (origin.addresses.get(chainId).size() > 0) addr = origin.addresses.get(chainId).get(0);
         if (addr != null) td = getAssetDefinition(chainId, addr);
         if (td != null)
@@ -690,7 +683,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
                 == PackageManager.PERMISSION_GRANTED;
     }
 
-    private TokenDefinition getDefinition(int chainId, String address)
+    private TokenDefinition getDefinition(long chainId, String address)
     {
         if (address.equalsIgnoreCase(tokensService.getCurrentAddress())) address = "ethereum";
         TokenDefinition result = null;
@@ -730,13 +723,13 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         }
         catch (Exception e)
         {
-            e.printStackTrace();
+            if (BuildConfig.DEBUG) e.printStackTrace();
         }
 
         return result;
     }
 
-    public TokenScriptFile getTokenScriptFile(int chainId, String address)
+    public TokenScriptFile getTokenScriptFile(long chainId, String address)
     {
         //pull from database
         if (address.equalsIgnoreCase(tokensService.getCurrentAddress())) address = "ethereum";
@@ -761,7 +754,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
      * @param address
      * @return
      */
-    public TokenDefinition getAssetDefinition(int chainId, String address)
+    public TokenDefinition getAssetDefinition(long chainId, String address)
     {
         TokenDefinition assetDef = null;
         if (address == null) return null;
@@ -781,7 +774,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         return assetDef; // if nothing found use default
     }
 
-    public Single<TokenDefinition> getAssetDefinitionASync(int chainId, final String address)
+    public Single<TokenDefinition> getAssetDefinitionASync(long chainId, final String address)
     {
         if (address == null) return Single.fromCallable(TokenDefinition::new);
         String contractName = address;
@@ -809,7 +802,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         }
         catch (InterruptedException e)
         {
-            e.printStackTrace();
+            if (BuildConfig.DEBUG) e.printStackTrace();
         }
         finally
         {
@@ -817,7 +810,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         }
     }
 
-    public String getTokenName(int chainId, String address, int count)
+    public String getTokenName(long chainId, String address, int count)
     {
         String tokenName = null;
         if (address.equalsIgnoreCase(tokensService.getCurrentAddress())) address = "ethereum";
@@ -836,7 +829,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         return tokenName;
     }
 
-    public Token getTokenFromService(int chainId, String address)
+    public Token getTokenFromService(long chainId, String address)
     {
         return tokensService.getToken(chainId, address);
     }
@@ -850,7 +843,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
      */
     public String getIssuerName(Token token)
     {
-        int chainId = token.tokenInfo.chainId;
+        long chainId = token.tokenInfo.chainId;
         String address = token.tokenInfo.address;
 
         String issuer = token.getNetworkName();
@@ -896,10 +889,10 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
 
     private void onError(Throwable throwable)
     {
-        throwable.printStackTrace();
+        if (BuildConfig.DEBUG) throwable.printStackTrace();
     }
 
-    private TokenDefinition parseFile(InputStream xmlInputStream) throws IOException, SAXException, Exception
+    private TokenDefinition parseFile(InputStream xmlInputStream) throws Exception
     {
         Locale locale;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -942,25 +935,28 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
 
     private void deleteScriptEntriesFromRealm(List<ContractLocator> origins, boolean isDebug)
     {
-        realmManager.getRealmInstance(ASSET_DEFINITION_DB).executeTransactionAsync(r -> {
-            for (ContractLocator cl : origins)
-            {
-                String entryKey = getTSDataKey(cl.chainId, cl.address);
-                RealmTokenScriptData realmData = r.where(RealmTokenScriptData.class)
-                        .equalTo("instanceKey", entryKey)
-                        .findFirst();
-
-                if (realmData != null && (isDebug || isInSecureZone(realmData.getFilePath()))) //delete the existing entry if this script is debug, or if the old script is in the server area
+        try (Realm realm = realmManager.getRealmInstance(ASSET_DEFINITION_DB))
+        {
+            realm.executeTransactionAsync(r -> {
+                for (ContractLocator cl : origins)
                 {
-                    RealmCertificateData realmCert = r.where(RealmCertificateData.class)
-                            .equalTo("instanceKey", realmData.getFileHash())
+                    String entryKey = getTSDataKey(cl.chainId, cl.address);
+                    RealmTokenScriptData realmData = r.where(RealmTokenScriptData.class)
+                            .equalTo("instanceKey", entryKey)
                             .findFirst();
-                    if (realmCert != null) realmCert.deleteFromRealm();
-                    deleteEventDataForScript(realmData);
-                    realmData.deleteFromRealm();
+
+                    if (realmData != null && (isDebug || isInSecureZone(realmData.getFilePath()))) //delete the existing entry if this script is debug, or if the old script is in the server area
+                    {
+                        RealmCertificateData realmCert = r.where(RealmCertificateData.class)
+                                .equalTo("instanceKey", realmData.getFileHash())
+                                .findFirst();
+                        if (realmCert != null) realmCert.deleteFromRealm();
+                        deleteEventDataForScript(realmData);
+                        realmData.deleteFromRealm();
+                    }
                 }
-            }
-        });
+            });
+        }
     }
 
     private Single<File> fetchXMLFromServer(String address)
@@ -1043,7 +1039,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
             }
             catch (Exception e)
             {
-                e.printStackTrace();
+                if (BuildConfig.DEBUG) e.printStackTrace();
             }
             finally
             {
@@ -1064,8 +1060,11 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
     private void finishLoading()
     {
         assetLoadingLock.release();
-        updateEventBlockTimes();
-        startEventListener();
+        if (Utils.isAddressValid(tokensService.getCurrentAddress()))
+        {
+            updateEventBlockTimes();
+            startEventListener();
+        }
     }
 
     private void removeFile(String filename)
@@ -1095,7 +1094,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
             if (holdingContracts != null)
             {
                 //some Android versions don't have stream()
-                for (int network : holdingContracts.addresses.keySet())
+                for (long network : holdingContracts.addresses.keySet())
                 {
                     for (String address : holdingContracts.addresses.get(network))
                     {
@@ -1113,7 +1112,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
                 return true;
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            if (BuildConfig.DEBUG) e.printStackTrace();
         }
         return false;
     }
@@ -1127,28 +1126,31 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         }
         catch (Exception e)
         {
-            e.printStackTrace();
+            if (BuildConfig.DEBUG) e.printStackTrace();
         }
 
         return td;
     }
 
-    private void updateRealmForBundledScript(int chainId, String address, String asset, TokenDefinition td)
+    private void updateRealmForBundledScript(long chainId, String address, String asset, TokenDefinition td)
     {
-        realmManager.getRealmInstance(ASSET_DEFINITION_DB).executeTransactionAsync(r -> {
-            String entryKey = getTSDataKey(chainId, address);
-            RealmTokenScriptData entry = r.where(RealmTokenScriptData.class)
-                    .equalTo("instanceKey", entryKey)
-                    .findFirst();
+        try (Realm realm = realmManager.getRealmInstance(ASSET_DEFINITION_DB))
+        {
+            realm.executeTransactionAsync(r -> {
+                String entryKey = getTSDataKey(chainId, address);
+                RealmTokenScriptData entry = r.where(RealmTokenScriptData.class)
+                        .equalTo("instanceKey", entryKey)
+                        .findFirst();
 
-            if (entry == null) entry = r.createObject(RealmTokenScriptData.class, entryKey);
-            entry.setFilePath(asset);
-            entry.setViewList(td.getViews());
-            entry.setNames(td.getTokenNameList());
-            entry.setHasEvents(td.hasEvents());
-            entry.setViewList(td.getViews());
-            entry.setFileHash(BUNDLED_SCRIPT);
-        });
+                if (entry == null) entry = r.createObject(RealmTokenScriptData.class, entryKey);
+                entry.setFilePath(asset);
+                entry.setViewList(td.getViews());
+                entry.setNames(td.getTokenNameList());
+                entry.setHasEvents(td.hasEvents());
+                entry.setViewList(td.getViews());
+                entry.setFileHash(BUNDLED_SCRIPT);
+            });
+        }
     }
 
     public TokenDefinition getTokenDefinition(File file)
@@ -1158,7 +1160,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         }
         catch (Exception e)
         {
-            e.printStackTrace();
+            if (BuildConfig.DEBUG) e.printStackTrace();
         }
 
         return null;
@@ -1288,7 +1290,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
 
     private EthFilter getEventFilter(EventDefinition ev) throws Exception
     {
-        int chainId = ev.getEventChainId();
+        long chainId = ev.getEventChainId();
         String address = ev.getEventContractAddress();
 
         Token originToken = tokensService.getToken(chainId, address);
@@ -1301,7 +1303,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
     private String processLogs(EventDefinition ev, List<EthLog.LogResult> logs, String walletAddress)
     {
         if (logs.size() == 0) return ""; //early return
-        int chainId = ev.contract.addresses.keySet().iterator().next();
+        long chainId = ev.contract.addresses.keySet().iterator().next();
         Web3j web3j = getWeb3jService(chainId);
 
         String firstTxHash = "";
@@ -1334,12 +1336,12 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
                 storeActivityValue(walletAddress, ev, ethLog, blockTime, ev.activityName);
 
                 //do we need to fetch transaction from chain or do we have it already?
-                com.alphawallet.app.entity.Transaction tx = transactionRespository.fetchCachedTransaction(walletAddress, txHash);
+                com.alphawallet.app.entity.Transaction tx = transactionRepository.fetchCachedTransaction(walletAddress, txHash);
 
                 if (tx == null)
                 {
                     EventUtils.getTransactionDetails(txHash, web3j)
-                            .flatMap(ethTx -> transactionRespository.storeRawTx(new Wallet(walletAddress), ethTx, blockTime))
+                            .flatMap(ethTx -> transactionRepository.storeRawTx(new Wallet(walletAddress), ethTx, blockTime))
                             .subscribeOn(Schedulers.io())
                             .observeOn(AndroidSchedulers.mainThread())
                             .subscribe(System.out::println, this::onError)
@@ -1356,7 +1358,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         ev.readBlock = readBlock.add(BigInteger.ONE);
         try (Realm realm = realmManager.getRealmInstance(walletAddress))
         {
-            int chainId = ev.getEventChainId();
+            long chainId = ev.getEventChainId();
             String eventAddress = ev.getEventContractAddress();
             String eventName = ev.activityName != null ? ev.activityName : ev.attributeName;
             String databaseKey = TokensRealmSource.eventBlockKey(chainId, eventAddress, ev.type.name, ev.filter);
@@ -1555,16 +1557,19 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
 
     private void storeCertificateData(String hash, XMLDsigDescriptor sig) throws RealmException
     {
-        realmManager.getRealmInstance(ASSET_DEFINITION_DB).executeTransactionAsync(r -> {
-            //if signature present, then just update
-            RealmCertificateData realmData = r.where(RealmCertificateData.class)
-                    .equalTo("instanceKey", hash)
-                    .findFirst();
+        try (Realm realm = realmManager.getRealmInstance(ASSET_DEFINITION_DB))
+        {
+            realm.executeTransactionAsync(r -> {
+                //if signature present, then just update
+                RealmCertificateData realmData = r.where(RealmCertificateData.class)
+                        .equalTo("instanceKey", hash)
+                        .findFirst();
 
-            if (realmData == null)
-                realmData = r.createObject(RealmCertificateData.class, hash);
-            realmData.setFromSig(sig);
-        });
+                if (realmData == null)
+                    realmData = r.createObject(RealmCertificateData.class, hash);
+                realmData.setFromSig(sig);
+            });
+        }
     }
 
     private XMLDsigDescriptor getCertificateFromRealm(String hash)
@@ -1621,7 +1626,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         return file;
     }
 
-    public boolean hasDefinition(int chainId, String address)
+    public boolean hasDefinition(long chainId, String address)
     {
         boolean hasDefinition = false;
         if (address.equalsIgnoreCase(tokensService.getCurrentAddress())) address = "ethereum";
@@ -1643,7 +1648,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         assetChecked.clear();
     }
 
-    public boolean hasTokenView(int chainId, String address, String type)
+    public boolean hasTokenView(long chainId, String address, String type)
     {
         if (address.equalsIgnoreCase(tokensService.getCurrentAddress())) address = "ethereum";
         try (Realm realm = realmManager.getRealmInstance(ASSET_DEFINITION_DB))
@@ -1656,7 +1661,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         }
     }
 
-    public String getTokenView(int chainId, String contractAddr, String type)
+    public String getTokenView(long chainId, String contractAddr, String type)
     {
         String viewHTML = "";
         TokenDefinition td = getAssetDefinition(chainId, contractAddr);
@@ -1668,7 +1673,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         return viewHTML;
     }
 
-    public String getTokenViewStyle(int chainId, String contractAddr, String type)
+    public String getTokenViewStyle(long chainId, String contractAddr, String type)
     {
         String styleData = "";
         TokenDefinition td = getAssetDefinition(chainId, contractAddr);
@@ -1680,7 +1685,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         return styleData;
     }
 
-    public List<Attribute> getTokenViewLocalAttributes(int chainId, String contractAddr)
+    public List<Attribute> getTokenViewLocalAttributes(long chainId, String contractAddr)
     {
         TokenDefinition td = getAssetDefinition(chainId, contractAddr);
         List<Attribute> results = new ArrayList<>();
@@ -1693,7 +1698,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         return results;
     }
 
-    public Map<String, TSAction> getTokenFunctionMap(int chainId, String contractAddr)
+    public Map<String, TSAction> getTokenFunctionMap(long chainId, String contractAddr)
     {
         TokenDefinition td = getAssetDefinition(chainId, contractAddr);
         if (td != null)
@@ -1946,7 +1951,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         return observer;
     }
 
-    public Single<XMLDsigDescriptor> getSignatureData(int chainId, String contractAddress)
+    public Single<XMLDsigDescriptor> getSignatureData(long chainId, String contractAddress)
     {
         return Single.fromCallable(() -> {
             XMLDsigDescriptor sigDescriptor = new XMLDsigDescriptor();
@@ -2156,7 +2161,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         String[] contractDetails = eventData.getInstanceKey().split("-");
         if (contractDetails.length != 5) return;
         String eventAddress = contractDetails[0];
-        int chainId = Integer.parseInt(contractDetails[1]);
+        long chainId = Long.parseLong(contractDetails[1]);
         String eventId = eventData.getFunctionId();
 
         String eventKey = EventDefinition.getEventKey(chainId, eventAddress, eventId, null);
@@ -2191,16 +2196,17 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
 
     private void addOpenSeaAttributes(StringBuilder attrs, Token erc721Token, BigInteger tokenId)
     {
-        Asset tokenAsset = erc721Token.getAssetForToken(tokenId.toString());
+        NFTAsset tokenAsset = erc721Token.getAssetForToken(tokenId.toString());
         if(tokenAsset == null) return;
 
         try
         {
+            //add all asset IDs
             if (tokenAsset.getBackgroundColor() != null) TokenScriptResult.addPair(attrs, "background_colour", URLEncoder.encode(tokenAsset.getBackgroundColor(), "utf-8"));
-            if (tokenAsset.getImagePreviewUrl() != null) TokenScriptResult.addPair(attrs, "image_preview_url", URLEncoder.encode(tokenAsset.getImagePreviewUrl(), "utf-8"));
+            if (tokenAsset.getThumbnail() != null) TokenScriptResult.addPair(attrs, "image_preview_url", URLEncoder.encode(tokenAsset.getThumbnail(), "utf-8"));
             if (tokenAsset.getDescription() != null) TokenScriptResult.addPair(attrs, "description", URLEncoder.encode(tokenAsset.getDescription(), "utf-8"));
             if (tokenAsset.getExternalLink() != null) TokenScriptResult.addPair(attrs, "external_link", URLEncoder.encode(tokenAsset.getExternalLink(), "utf-8"));
-            if (tokenAsset.getTraits() != null) TokenScriptResult.addPair(attrs, "traits", tokenAsset.getTraits());
+            //if (tokenAsset.getTraits() != null) TokenScriptResult.addPair(attrs, "traits", tokenAsset.getTraits());
             if (tokenAsset.getName() != null) TokenScriptResult.addPair(attrs, "name", URLEncoder.encode(tokenAsset.getName(), "utf-8"));
         }
         catch (UnsupportedEncodingException e)
@@ -2245,7 +2251,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
      * Get all the magic values - eg native crypto balances for all chains
      * @return
      */
-    public String getMagicValuesForInjection(int chainId) throws Exception
+    public String getMagicValuesForInjection(long chainId) throws Exception
     {
         String walletBalance = "walletBalance";
         String prefix = "web3.eth";
@@ -2450,7 +2456,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         });
     }
 
-    public Single<TokenDefinition> checkServerForScript(int chainId, String address)
+    public Single<TokenDefinition> checkServerForScript(long chainId, String address)
     {
         TokenScriptFile tf = getTokenScriptFile(chainId, address);
         if (tf != null && !isInSecureZone(tf)) return Single.fromCallable(TokenDefinition::new); //early return for debug script check
@@ -2463,7 +2469,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
                 .observeOn(AndroidSchedulers.mainThread());
     }
 
-    public void storeTokenViewHeight(int chainId, String address, int listViewHeight)
+    public void storeTokenViewHeight(long chainId, String address, int listViewHeight)
     {
         try (Realm realm = realmManager.getRealmInstance(tokensService.getCurrentAddress()))
         {
@@ -2489,7 +2495,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         }
     }
 
-    public String getTokenImageUrl(int networkId, String address)
+    public String getTokenImageUrl(long networkId, String address)
     {
         String url = "";
         String instanceKey = address.toLowerCase() + "-" + networkId;
@@ -2512,26 +2518,29 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         return url;
     }
 
-    public IconItem fetchIconForToken(Token token)
+    public String getFallbackUrlForToken(Token token)
     {
         String correctedAddr = Keys.toChecksumAddress(token.getAddress());
 
         String tURL = getTokenImageUrl(token.tokenInfo.chainId, token.getAddress());
         if (TextUtils.isEmpty(tURL))
         {
-            tURL = Utils.getTokenImageUrl(token.tokenInfo.chainId, correctedAddr);
+            tURL = Utils.getTWTokenImageUrl(token.tokenInfo.chainId, correctedAddr);
         }
 
-        return new IconItem(tURL, correctedAddr, token.tokenInfo.chainId);
+        return tURL;
     }
 
-    public void storeImageUrl(int chainId, String tokenAddress)
+    public void storeImageUrl(long chainId, String imageUrl)
     {
-        String imageUrl = Utils.getAWIconRepo(tokenAddress);
-        tokensService.addTokenImageUrl(chainId, tokenAddress, imageUrl);
+        String tokenAddress = Utils.getTokenAddrFromAWUrl(imageUrl);
+        if (!TextUtils.isEmpty(tokenAddress))
+        {
+            tokensService.addTokenImageUrl(chainId, tokenAddress, imageUrl);
+        }
     }
 
-    public Single<Integer> fetchViewHeight(int chainId, String address)
+    public Single<Integer> fetchViewHeight(long chainId, String address)
     {
         return Single.fromCallable(() -> {
             try (Realm realm = realmManager.getRealmInstance(tokensService.getCurrentAddress()))
@@ -2567,7 +2576,7 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
         });
     }
 
-    private String tokenSizeDBKey(int chainId, String address)
+    private String tokenSizeDBKey(long chainId, String address)
     {
         return "szkey-" + chainId + "-" + address.toLowerCase();
     }
@@ -2575,5 +2584,22 @@ public class AssetDefinitionService implements ParseResult, AttributeInterface
     public Realm getEventRealm()
     {
         return realmManager.getRealmInstance(tokensService.getCurrentAddress());
+    }
+
+    // For testing only
+    private void deleteAWRealm()
+    {
+        try (Realm realm = realmManager.getRealmInstance(IMAGES_DB))
+        {
+            realm.executeTransactionAsync(r -> {
+                RealmResults<RealmAuxData> instance = r.where(RealmAuxData.class)
+                        .findAll();
+
+                if (instance != null)
+                {
+                    instance.deleteAllFromRealm();
+                }
+            });
+        }
     }
 }

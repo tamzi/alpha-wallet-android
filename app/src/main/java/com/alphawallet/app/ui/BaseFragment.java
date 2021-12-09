@@ -18,7 +18,7 @@ public class BaseFragment extends Fragment implements Toolbar.OnMenuItemClickLis
         toolbarTitle = toolbar.findViewById(R.id.toolbar_title);
     }
     protected void toolbar(View view) {
-        initToolbar(view);
+        if (view != null) initToolbar(view);
     }
 
     protected void toolbar(View view, int title, int menuResId) {
@@ -70,5 +70,15 @@ public class BaseFragment extends Fragment implements Toolbar.OnMenuItemClickLis
     @Override
     public boolean onMenuItemClick(MenuItem menuItem) {
         return false;
+    }
+
+    public void comeIntoFocus()
+    {
+        //
+    }
+
+    public void leaveFocus()
+    {
+        //
     }
 }

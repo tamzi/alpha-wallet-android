@@ -14,7 +14,6 @@ import com.alphawallet.app.entity.TransactionData;
 import com.alphawallet.app.entity.Wallet;
 import com.alphawallet.app.entity.tokens.Token;
 import com.alphawallet.app.entity.tokens.TokenInfo;
-import com.alphawallet.app.interact.AddTokenInteract;
 import com.alphawallet.app.interact.CreateTransactionInteract;
 import com.alphawallet.app.interact.FetchTransactionsInteract;
 import com.alphawallet.app.repository.EthereumNetworkRepositoryType;
@@ -33,6 +32,7 @@ import com.alphawallet.app.web3.entity.Web3Transaction;
 import org.web3j.protocol.core.methods.response.EthEstimateGas;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 
 import io.reactivex.Single;
 import io.reactivex.android.schedulers.AndroidSchedulers;
@@ -47,37 +47,31 @@ public class SendViewModel extends BaseViewModel {
     private final EthereumNetworkRepositoryType networkRepository;
     private final TokensService tokensService;
     private final FetchTransactionsInteract fetchTransactionsInteract;
-    private final AddTokenInteract addTokenInteract;
     private final GasService gasService;
     private final AssetDefinitionService assetDefinitionService;
     private final KeyService keyService;
     private final CreateTransactionInteract createTransactionInteract;
     private final AnalyticsServiceType analyticsService;
-    private final PreferenceRepositoryType preferenceRepository;
 
     public SendViewModel(MyAddressRouter myAddressRouter,
                          EthereumNetworkRepositoryType ethereumNetworkRepositoryType,
                          TokensService tokensService,
                          FetchTransactionsInteract fetchTransactionsInteract,
-                         AddTokenInteract addTokenInteract,
                          CreateTransactionInteract createTransactionInteract,
                          GasService gasService,
                          AssetDefinitionService assetDefinitionService,
                          KeyService keyService,
-                         AnalyticsServiceType analyticsService,
-                         PreferenceRepositoryType preferenceRepository)
+                         AnalyticsServiceType analyticsService)
     {
         this.myAddressRouter = myAddressRouter;
         this.networkRepository = ethereumNetworkRepositoryType;
         this.tokensService = tokensService;
         this.fetchTransactionsInteract = fetchTransactionsInteract;
-        this.addTokenInteract = addTokenInteract;
         this.gasService = gasService;
         this.assetDefinitionService = assetDefinitionService;
         this.keyService = keyService;
         this.createTransactionInteract = createTransactionInteract;
         this.analyticsService = analyticsService;
-        this.preferenceRepository = preferenceRepository;
     }
 
     public MutableLiveData<TransactionData> transactionFinalised()
@@ -91,12 +85,12 @@ public class SendViewModel extends BaseViewModel {
         myAddressRouter.open(ctx, wallet, token);
     }
 
-    public NetworkInfo getNetworkInfo(int chainId)
+    public NetworkInfo getNetworkInfo(long chainId)
     {
         return networkRepository.getNetworkByChain(chainId);
     }
 
-    public Token getToken(int chainId, String tokenAddress) { return tokensService.getToken(chainId, tokenAddress); };
+    public Token getToken(long chainId, String tokenAddress) { return tokensService.getToken(chainId, tokenAddress); }
 
     public void showImportLink(Context context, String importTxt)
     {
@@ -106,7 +100,7 @@ public class SendViewModel extends BaseViewModel {
         context.startActivity(intent);
     }
 
-    public void fetchToken(int chainId, String address, String walletAddress)
+    public void fetchToken(long chainId, String address, String walletAddress)
     {
         tokensService.update(address, chainId)
                 .subscribeOn(Schedulers.io())
@@ -116,8 +110,7 @@ public class SendViewModel extends BaseViewModel {
 
     private void gotTokenUpdate(TokenInfo tokenInfo, String walletAddress)
     {
-        disposable = fetchTransactionsInteract.queryInterfaceSpec(tokenInfo).toObservable()
-                .flatMap(contractType -> addTokenInteract.add(tokenInfo, contractType, new Wallet(walletAddress)))
+        disposable = tokensService.addToken(tokenInfo, walletAddress)
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(finalisedToken::postValue, this::onError);
@@ -133,7 +126,7 @@ public class SendViewModel extends BaseViewModel {
         return tokensService;
     }
 
-    public void startGasCycle(int chainId)
+    public void startGasCycle(long chainId)
     {
         gasService.startGasPriceCycle(chainId);
     }
@@ -158,9 +151,9 @@ public class SendViewModel extends BaseViewModel {
         return txBytes;
     }
 
-    public Single<EthEstimateGas> calculateGasEstimate(Wallet wallet, byte[] transactionBytes, int chainId, String sendAddress, BigDecimal sendAmount)
+    public Single<BigInteger> calculateGasEstimate(Wallet wallet, byte[] transactionBytes, long chainId, String sendAddress, BigDecimal sendAmount)
     {
-        return gasService.calculateGasEstimate(transactionBytes, chainId, sendAddress, sendAmount.toBigInteger(), wallet);
+        return gasService.calculateGasEstimate(transactionBytes, chainId, sendAddress, sendAmount.toBigInteger(), wallet, BigInteger.ZERO);
     }
 
     public void getAuthentication(Activity activity, Wallet wallet, SignAuthenticationCallback callback)
@@ -168,7 +161,7 @@ public class SendViewModel extends BaseViewModel {
         keyService.getAuthenticationForSignature(wallet, activity, callback);
     }
 
-    public void sendTransaction(Web3Transaction finalTx, Wallet wallet, int chainId)
+    public void sendTransaction(Web3Transaction finalTx, Wallet wallet, long chainId)
     {
         disposable = createTransactionInteract
                 .createWithSig(wallet, finalTx, chainId)
@@ -182,9 +175,5 @@ public class SendViewModel extends BaseViewModel {
         analyticsProperties.setData(mode);
 
         analyticsService.track(C.AN_CALL_ACTIONSHEET, analyticsProperties);
-    }
-
-    public void tryToShowRateAppDialog(Activity context) {
-        RateApp.showRateTheApp(context, preferenceRepository, true);
     }
 }

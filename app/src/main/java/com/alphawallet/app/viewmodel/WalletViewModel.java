@@ -1,10 +1,13 @@
 package com.alphawallet.app.viewmodel;
 
+import static com.alphawallet.ethereum.EthereumNetworkBase.MAINNET_ID;
+
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
+
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
@@ -16,12 +19,16 @@ import com.alphawallet.app.entity.tokens.TokenCardMeta;
 import com.alphawallet.app.interact.ChangeTokenEnableInteract;
 import com.alphawallet.app.interact.FetchTokensInteract;
 import com.alphawallet.app.interact.GenericWalletInteract;
+import com.alphawallet.app.repository.PreferenceRepositoryType;
+import com.alphawallet.app.repository.TokenRepository;
 import com.alphawallet.app.router.AssetDisplayRouter;
-import com.alphawallet.app.router.Erc20DetailRouter;
+import com.alphawallet.app.router.TokenDetailRouter;
 import com.alphawallet.app.router.MyAddressRouter;
 import com.alphawallet.app.service.AssetDefinitionService;
+import com.alphawallet.app.service.RealmManager;
 import com.alphawallet.app.service.TokensService;
-import com.alphawallet.app.ui.zxing.QRScanningActivity;
+import com.alphawallet.app.ui.QRScanning.QRScanner;
+import com.alphawallet.app.util.AWEnsResolver;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -41,33 +48,39 @@ public class WalletViewModel extends BaseViewModel
     private final MutableLiveData<GenericWalletInteract.BackupLevel> backupEvent = new MutableLiveData<>();
 
     private final FetchTokensInteract fetchTokensInteract;
-    private final Erc20DetailRouter erc20DetailRouter;
+    private final TokenDetailRouter tokenDetailRouter;
     private final AssetDisplayRouter assetDisplayRouter;
     private final GenericWalletInteract genericWalletInteract;
     private final AssetDefinitionService assetDefinitionService;
     private final TokensService tokensService;
     private final ChangeTokenEnableInteract changeTokenEnableInteract;
+    private final PreferenceRepositoryType preferenceRepository;
     private final MyAddressRouter myAddressRouter;
+    private final RealmManager realmManager;
     private long lastBackupCheck = 0;
 
     WalletViewModel(
             FetchTokensInteract fetchTokensInteract,
-            Erc20DetailRouter erc20DetailRouter,
+            TokenDetailRouter tokenDetailRouter,
             AssetDisplayRouter assetDisplayRouter,
             GenericWalletInteract genericWalletInteract,
             AssetDefinitionService assetDefinitionService,
             TokensService tokensService,
             ChangeTokenEnableInteract changeTokenEnableInteract,
-            MyAddressRouter myAddressRouter)
+            MyAddressRouter myAddressRouter,
+            PreferenceRepositoryType preferenceRepository,
+            RealmManager realmManager)
     {
         this.fetchTokensInteract = fetchTokensInteract;
-        this.erc20DetailRouter = erc20DetailRouter;
+        this.tokenDetailRouter = tokenDetailRouter;
         this.assetDisplayRouter = assetDisplayRouter;
         this.genericWalletInteract = genericWalletInteract;
         this.assetDefinitionService = assetDefinitionService;
         this.tokensService = tokensService;
         this.changeTokenEnableInteract = changeTokenEnableInteract;
         this.myAddressRouter = myAddressRouter;
+        this.preferenceRepository = preferenceRepository;
+        this.realmManager = realmManager;
     }
 
     public LiveData<TokenCardMeta[]> tokens() {
@@ -173,26 +186,51 @@ public class WalletViewModel extends BaseViewModel
     }
 
     public void showQRCodeScanning(Activity activity) {
-        Intent intent = new Intent(activity, QRScanningActivity.class);
+        Intent intent = new Intent(activity, QRScanner.class);
         intent.putExtra(C.EXTRA_UNIVERSAL_SCAN, true);
         activity.startActivityForResult(intent, C.REQUEST_UNIVERSAL_SCAN);
     }
 
-    public Realm getRealmInstance(Wallet wallet)
+    public Realm getRealmInstance()
     {
-        return tokensService.getRealmInstance(wallet);
+        return realmManager.getRealmInstance(getWallet());
     }
 
-    @Override
-    public void showErc20TokenDetail(Activity context, @NotNull String address, String symbol, int decimals, @NotNull Token token) {
-        boolean isToken = !address.equalsIgnoreCase(defaultWallet.getValue().address);
-        boolean hasDefinition = assetDefinitionService.hasDefinition(token.tokenInfo.chainId, address);
-        erc20DetailRouter.open(context, address, symbol, decimals, isToken, defaultWallet.getValue(), token, hasDefinition);
-    }
+    public void showTokenDetail(Activity activity, Token token)
+    {
+        boolean hasDefinition = assetDefinitionService.hasDefinition(token.tokenInfo.chainId, token.getAddress());
+        switch (token.getInterfaceSpec())
+        {
+            case ETHEREUM:
+            case ERC20:
+            case CURRENCY:
+            case DYNAMIC_CONTRACT:
+            case LEGACY_DYNAMIC_CONTRACT:
+            case ETHEREUM_INVISIBLE:
+            case MAYBE_ERC20:
+                tokenDetailRouter.open(activity, token.getAddress(), token.tokenInfo.symbol, token.tokenInfo.decimals,
+                        !token.isEthereum(), defaultWallet.getValue(), token, hasDefinition);
+                break;
 
-    @Override
-    public void showTokenList(Activity activity, Token token) {
-        assetDisplayRouter.open(activity, token, defaultWallet.getValue());
+            case ERC1155:
+                tokenDetailRouter.openERC1155(activity, token, defaultWallet.getValue(), hasDefinition);
+                break;
+
+            case ERC721:
+            case ERC875_LEGACY:
+            case ERC875:
+            case ERC721_LEGACY:
+            case ERC721_TICKET:
+            case ERC721_UNDETERMINED:
+                assetDisplayRouter.open(activity, token, defaultWallet.getValue()); //TODO: Fold this into tokenDetailRouter
+                break;
+
+            case NOT_SET:
+            case OTHER:
+            case DELETED_ACCOUNT:
+            case CREATION:
+                break;
+        }
     }
 
     public void checkBackup()
@@ -236,10 +274,24 @@ public class WalletViewModel extends BaseViewModel
     public void notifyRefresh()
     {
         tokensService.clearFocusToken(); //ensure if we do a refresh there's no focus token preventing correct update
+        tokensService.onWalletRefreshSwipe();
     }
 
-    public boolean isChainToken(int chainId, String tokenAddress)
+    public boolean isChainToken(long chainId, String tokenAddress)
     {
         return tokensService.isChainToken(chainId, tokenAddress);
+    }
+
+    public boolean isMarshMallowWarningShown() {
+        return preferenceRepository.isMarshMallowWarningShown();
+    }
+
+    public void setMarshMallowWarning(boolean shown) {
+        preferenceRepository.setMarshMallowWarning(shown);
+    }
+
+    public void saveAvatar(Wallet wallet)
+    {
+        genericWalletInteract.updateWalletInfo(wallet, wallet.name, () -> { });
     }
 }

@@ -1,5 +1,6 @@
 package com.alphawallet.app.entity;
 
+import com.alphawallet.app.BuildConfig;
 import com.alphawallet.app.web3.entity.Web3Transaction;
 
 import org.web3j.crypto.Hash;
@@ -82,7 +83,7 @@ public class TransactionDecoder
         }
         catch (Exception e)
         {
-            e.printStackTrace();
+            if (BuildConfig.DEBUG) e.printStackTrace();
         }
 
         thisData.setOperationType(null, null); //works for most cases; for magiclink requires tx and wallet data - but we don't see many of these now
@@ -96,7 +97,7 @@ public class TransactionDecoder
         return thisData;
     }
 
-    public TransactionInput decodeInput(Web3Transaction web3Tx, int chainId, String walletAddress)
+    public TransactionInput decodeInput(Web3Transaction web3Tx, long chainId, String walletAddress)
     {
         TransactionInput thisData = decodeInput(web3Tx.payload);
         Transaction tx = new Transaction(web3Tx, chainId, walletAddress);
@@ -322,6 +323,9 @@ public class TransactionDecoder
         addFunction("tokensOfOwner(address)", ContractType.ERC721, false);
         addFunction("store(uint256)", ContractType.ERC721, false);
         addFunction("remix(uint256,bytes)", ContractType.ERC721, false);
+
+        addFunction("safeTransferFrom(address,address,uint256,uint256,bytes)", ContractType.ERC1155, false);
+        addFunction("safeBatchTransferFrom(address,address,uint256[],uint256[],bytes)", ContractType.ERC1155, false);
 
         addFunction("dropCurrency(uint32,uint32,uint32,uint8,bytes32,bytes32,address)", ContractType.CURRENCY, true);
         addFunction("withdraw(uint256)", ContractType.CURRENCY, false); //0x2e1a7d4d0000000000000000000000000000000000000000000000000000000000000001

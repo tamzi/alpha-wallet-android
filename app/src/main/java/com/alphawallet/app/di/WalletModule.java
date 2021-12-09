@@ -4,12 +4,14 @@ package com.alphawallet.app.di;
 import com.alphawallet.app.interact.ChangeTokenEnableInteract;
 import com.alphawallet.app.interact.FetchTokensInteract;
 import com.alphawallet.app.interact.GenericWalletInteract;
+import com.alphawallet.app.repository.PreferenceRepositoryType;
 import com.alphawallet.app.repository.TokenRepositoryType;
 import com.alphawallet.app.repository.WalletRepositoryType;
 import com.alphawallet.app.router.AssetDisplayRouter;
-import com.alphawallet.app.router.Erc20DetailRouter;
+import com.alphawallet.app.router.TokenDetailRouter;
 import com.alphawallet.app.router.MyAddressRouter;
 import com.alphawallet.app.service.AssetDefinitionService;
+import com.alphawallet.app.service.RealmManager;
 import com.alphawallet.app.service.TokensService;
 import com.alphawallet.app.viewmodel.WalletViewModelFactory;
 
@@ -21,22 +23,26 @@ public class WalletModule {
     @Provides
     WalletViewModelFactory provideWalletViewModelFactory(
             FetchTokensInteract fetchTokensInteract,
-            Erc20DetailRouter erc20DetailRouter,
+            TokenDetailRouter tokenDetailRouter,
             AssetDisplayRouter assetDisplayRouter,
             GenericWalletInteract genericWalletInteract,
             AssetDefinitionService assetDefinitionService,
             TokensService tokensService,
             ChangeTokenEnableInteract changeTokenEnableInteract,
-            MyAddressRouter myAddressRouter) {
+            MyAddressRouter myAddressRouter,
+            PreferenceRepositoryType preferenceRepository,
+            RealmManager realmManager) {
         return new WalletViewModelFactory(
                 fetchTokensInteract,
-                erc20DetailRouter,
+                tokenDetailRouter,
                 assetDisplayRouter,
                 genericWalletInteract,
                 assetDefinitionService,
                 tokensService,
                 changeTokenEnableInteract,
-                myAddressRouter);
+                myAddressRouter,
+                preferenceRepository,
+                realmManager);
     }
 
     @Provides
@@ -45,8 +51,8 @@ public class WalletModule {
     }
 
     @Provides
-    Erc20DetailRouter provideErc20DetailRouterRouter() {
-        return new Erc20DetailRouter();
+    TokenDetailRouter provideErc20DetailRouterRouter() {
+        return new TokenDetailRouter();
     }
 
     @Provides

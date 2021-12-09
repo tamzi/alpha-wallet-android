@@ -22,7 +22,7 @@ import com.alphawallet.app.entity.SignAuthenticationCallback;
 import com.alphawallet.app.entity.StandardFunctionInterface;
 import com.alphawallet.app.entity.TransactionData;
 import com.alphawallet.app.entity.Wallet;
-import com.alphawallet.app.entity.opensea.Asset;
+import com.alphawallet.app.entity.nftassets.NFTAsset;
 import com.alphawallet.app.entity.tokens.Token;
 import com.alphawallet.app.service.GasService;
 import com.alphawallet.app.ui.widget.adapter.NonFungibleTokenAdapter;
@@ -37,6 +37,7 @@ import com.alphawallet.app.widget.ActionSheetDialog;
 import com.alphawallet.app.widget.CertifiedToolbarView;
 import com.alphawallet.app.widget.FunctionButtonBar;
 import com.alphawallet.app.widget.SystemView;
+import com.alphawallet.ethereum.EthereumNetworkBase;
 import com.alphawallet.token.entity.TSAction;
 import com.alphawallet.token.entity.TicketRange;
 import com.alphawallet.token.entity.XMLDsigDescriptor;
@@ -51,7 +52,6 @@ import dagger.android.AndroidInjection;
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.schedulers.Schedulers;
 
-import static com.alphawallet.app.C.Key.TICKET;
 import static com.alphawallet.app.C.Key.WALLET;
 import static com.alphawallet.app.widget.AWalletAlertDialog.WARNING;
 
@@ -109,10 +109,16 @@ public class AssetDisplayActivity extends BaseActivity implements StandardFuncti
     {
         AndroidInjection.inject(this);
 
-        token = getIntent().getParcelableExtra(TICKET);
         wallet = getIntent().getParcelableExtra(WALLET);
 
         super.onCreate(savedInstanceState);
+
+        viewModel = new ViewModelProvider(this, tokenFunctionViewModelFactory)
+                .get(TokenFunctionViewModel.class);
+
+        String address = getIntent().getStringExtra(C.EXTRA_ADDRESS);
+        long chainId = getIntent().getLongExtra(C.EXTRA_CHAIN_ID, EthereumNetworkBase.MAINNET_ID);
+        token = viewModel.getToken(chainId, address);
 
         setContentView(R.layout.activity_asset_display);
         toolbar();
@@ -131,8 +137,7 @@ public class AssetDisplayActivity extends BaseActivity implements StandardFuncti
         tokenView = findViewById(R.id.token_view);
         toolbarView = findViewById(R.id.toolbar);
 
-        viewModel = new ViewModelProvider(this, tokenFunctionViewModelFactory)
-                .get(TokenFunctionViewModel.class);
+
         viewModel.pushToast().observe(this, this::displayToast);
         viewModel.sig().observe(this, this::onSigData);
         viewModel.insufficientFunds().observe(this, this::errorInsufficientFunds);
@@ -440,9 +445,9 @@ public class AssetDisplayActivity extends BaseActivity implements StandardFuncti
         tokenView.setAdapter(adapter);
     }
 
-    public void storeAsset(Asset asset)
+    public void storeAsset(BigInteger tokenId, NFTAsset asset)
     {
-        viewModel.getTokensService().storeAsset(token, asset);
+        viewModel.getTokensService().storeAsset(token, tokenId, asset);
     }
 
     private void errorInsufficientFunds(Token currency)

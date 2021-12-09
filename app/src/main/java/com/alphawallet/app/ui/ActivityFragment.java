@@ -2,6 +2,8 @@ package com.alphawallet.app.ui;
 
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
+import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -33,12 +35,14 @@ import com.alphawallet.app.widget.SystemView;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 import javax.inject.Inject;
 
 import dagger.android.support.AndroidSupportInjection;
 import io.realm.Realm;
 import io.realm.RealmResults;
+import io.realm.Sort;
 
 /**
  * Created by JB on 26/06/2020.
@@ -52,13 +56,12 @@ public class ActivityFragment extends BaseFragment implements View.OnClickListen
     private SystemView systemView;
     private ActivityAdapter adapter;
     private RecyclerView listView;
-    private Realm realm;
     private RealmResults<RealmTransaction> realmUpdates;
-    private RealmResults<RealmTransfer> auxRealmUpdates;
-    private String realmId;
-    private long eventTimeFilter;
-    private final Handler handler = new Handler();
+    private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean checkTimer;
+    private Realm realm;
+    private long lastUpdateTime = 0;
+    private boolean isVisible = false;
 
     @Nullable
     @Override
@@ -85,85 +88,53 @@ public class ActivityFragment extends BaseFragment implements View.OnClickListen
 
     private void onItemsLoaded(ActivityMeta[] activityItems)
     {
-        realm = viewModel.getRealmInstance();
-        adapter.updateActivityItems(buildTransactionList(activityItems).toArray(new ActivityMeta[0]));
-        showEmptyTx();
-        long lastUpdateTime = 0;
-
-        for (ActivityMeta am : activityItems)
+        try (Realm realm = viewModel.getRealmInstance())
         {
-            if (am instanceof TransactionMeta && am.getTimeStampSeconds() > lastUpdateTime) lastUpdateTime = am.getTimeStampSeconds();
+            adapter.updateActivityItems(buildTransactionList(realm, activityItems).toArray(new ActivityMeta[0]));
+            showEmptyTx();
+
+            for (ActivityMeta am : activityItems)
+            {
+                if (am instanceof TransactionMeta && am.getTimeStampSeconds() > lastUpdateTime) lastUpdateTime = am.getTimeStampSeconds() - 60;
+            }
         }
 
-        startTxListener(lastUpdateTime - 60*10); //adjust for timestamp delay
+        if (isVisible) startTxListener();
     }
 
-    private void startTxListener(long lastUpdateTime)
+    private void startTxListener()
     {
-        String walletAddress = viewModel.defaultWallet().getValue() != null ? viewModel.defaultWallet().getValue().address : "";
-        eventTimeFilter = 0;
-        if (realmId == null || !realmId.equalsIgnoreCase(walletAddress))
-        {
-            if (realmUpdates != null) realmUpdates.removeAllChangeListeners();
+        if (viewModel.defaultWallet().getValue() == null) return;
+        if (realm == null || realm.isClosed()) realm = viewModel.getRealmInstance();
+        if (realmUpdates != null) realmUpdates.removeAllChangeListeners();
+        if (viewModel == null || viewModel.defaultWallet().getValue() == null || TextUtils.isEmpty(viewModel.defaultWallet().getValue().address))
+            return;
 
-            realmId = walletAddress;
-            realmUpdates = realm.where(RealmTransaction.class).greaterThan("timeStamp", lastUpdateTime).findAllAsync();
-            realmUpdates.addChangeListener(realmTransactions -> {
-                List<TransactionMeta> metas = new ArrayList<>();
-                //make list
-                if (realmTransactions.size() == 0) return;
-                for (RealmTransaction item : realmTransactions)
+        realmUpdates = realm.where(RealmTransaction.class).greaterThan("timeStamp", lastUpdateTime).findAllAsync();
+        realmUpdates.addChangeListener(realmTransactions -> {
+            List<TransactionMeta> metas = new ArrayList<>();
+            //make list
+            if (realmTransactions.size() == 0) return;
+            for (RealmTransaction item : realmTransactions)
+            {
+                if (viewModel.getTokensService().getNetworkFilters().contains(item.getChainId()))
                 {
-                    if (viewModel.getTokensService().getNetworkFilters().contains(item.getChainId()))
-                    {
-                        TransactionMeta newMeta = new TransactionMeta(item.getHash(), item.getTimeStamp(), item.getTo(), item.getChainId(), item.getBlockNumber());
-                        metas.add(newMeta);
-                    }
+                    TransactionMeta newMeta = new TransactionMeta(item.getHash(), item.getTimeStamp(), item.getTo(), item.getChainId(), item.getBlockNumber());
+                    metas.add(newMeta);
+                    lastUpdateTime = newMeta.getTimeStampSeconds() + 1;
                 }
+            }
 
-                if (metas.size() > 0)
-                {
-                    TransactionMeta[] metaArray = metas.toArray(new TransactionMeta[0]);
-                    adapter.updateActivityItems(buildTransactionList(metaArray).toArray(new ActivityMeta[0]));
-                    systemView.hide();
-                }
-            });
-
-            auxRealmUpdates = realm.where(RealmTransfer.class)
-                    .findAllAsync();
-            auxRealmUpdates.addChangeListener(realmEvents -> {
-                if (realmEvents.size() == 0) return;
-                List<TransactionMeta> updates = new ArrayList<>();
-                for (RealmTransfer item : realmEvents)
-                {
-                    RealmTransaction rt = getRealmTransaction(item.getHash());
-                    if (rt == null || !viewModel.getTokensService().getNetworkFilters().contains(rt.getChainId())) { continue; }
-                    updates.add(new TransactionMeta(rt.getHash(), rt.getTimeStamp(), rt.getTo(), rt.getChainId(), rt.getBlockNumber()));
-                }
-
-                if (updates.size() > 0)
-                {
-                    handler.post(() -> {
-                        TransactionMeta[] metaArray = updates.toArray(new TransactionMeta[0]);
-                        adapter.updateActivityItems(buildTransactionList(metaArray).toArray(new ActivityMeta[0]));
-                        systemView.hide();
-                    });
-
-                    systemView.hide();
-                }
-            });
-        }
+            if (metas.size() > 0)
+            {
+                TransactionMeta[] metaArray = metas.toArray(new TransactionMeta[0]);
+                adapter.updateActivityItems(buildTransactionList(realm, metaArray).toArray(new ActivityMeta[0]));
+                systemView.hide();
+            }
+        });
     }
 
-    private RealmTransaction getRealmTransaction(String hash)
-    {
-        if (realm == null) return null;
-        return realm.where(RealmTransaction.class)
-                .equalTo("hash", hash)
-                .findFirst();
-    }
-
-    private List<ActivityMeta> buildTransactionList(ActivityMeta[] activityItems)
+    private List<ActivityMeta> buildTransactionList(Realm realm, ActivityMeta[] activityItems)
     {
         //selectively filter the items with the following rules:
         // - allow through all normal transactions with no token transfer consequences
@@ -175,7 +146,7 @@ public class ActivityFragment extends BaseFragment implements View.OnClickListen
         {
             if (am instanceof TransactionMeta)
             {
-                List<TokenTransferData> tokenTransfers = getTokenTransfersForHash((TransactionMeta)am);
+                List<TokenTransferData> tokenTransfers = getTokenTransfersForHash(realm, (TransactionMeta)am);
                 if (tokenTransfers.size() != 1) { filteredList.add(am); } //only 1 token transfer ? No need to show the underlying transaction
                 filteredList.addAll(tokenTransfers);
             }
@@ -184,7 +155,7 @@ public class ActivityFragment extends BaseFragment implements View.OnClickListen
         return filteredList;
     }
 
-    private List<TokenTransferData> getTokenTransfersForHash(TransactionMeta tm)
+    private List<TokenTransferData> getTokenTransfersForHash(Realm realm, TransactionMeta tm)
     {
         List<TokenTransferData> transferData = new ArrayList<>();
         //summon realm items
@@ -219,7 +190,7 @@ public class ActivityFragment extends BaseFragment implements View.OnClickListen
         listView.setLayoutManager(new LinearLayoutManager(getContext()));
         listView.setAdapter(adapter);
         listView.addItemDecoration(new RecycleViewDivider(getContext()));
-        listView.setRecyclerListener(holder -> adapter.onRViewRecycled(holder));
+        listView.addRecyclerListener(holder -> adapter.onRViewRecycled(holder));
 
         systemView.attachRecyclerView(listView);
         systemView.attachSwipeRefreshLayout(refreshLayout);
@@ -273,7 +244,6 @@ public class ActivityFragment extends BaseFragment implements View.OnClickListen
     {
         super.onDestroy();
         if (realmUpdates != null) realmUpdates.removeAllChangeListeners();
-        if (auxRealmUpdates != null) auxRealmUpdates.removeAllChangeListeners();
         if (realm != null && !realm.isClosed()) realm.close();
         if (viewModel != null) viewModel.onDestroy();
         if (adapter != null && listView != null) adapter.onDestroy(listView);
@@ -312,6 +282,23 @@ public class ActivityFragment extends BaseFragment implements View.OnClickListen
     public void onClick(View v)
     {
 
+    }
+
+    @Override
+    public void comeIntoFocus()
+    {
+        isVisible = true;
+        //start listener
+        startTxListener(); //adjust for timestamp delay
+    }
+
+    @Override
+    public void leaveFocus()
+    {
+        isVisible = false;
+        //stop listener
+        if (realmUpdates != null) realmUpdates.removeAllChangeListeners();
+        if (realm != null && !realm.isClosed()) realm.close();
     }
 
     public void resetTransactions()

@@ -28,7 +28,7 @@ import com.alphawallet.app.service.AnalyticsServiceType;
 import com.alphawallet.app.service.AssetDefinitionService;
 import com.alphawallet.app.service.GasService;
 import com.alphawallet.app.service.KeyService;
-import com.alphawallet.app.service.OpenseaService;
+import com.alphawallet.app.service.OpenSeaService;
 import com.alphawallet.app.service.TokensService;
 import com.alphawallet.app.ui.AssetDisplayActivity;
 import com.alphawallet.app.ui.Erc20DetailActivity;
@@ -85,7 +85,7 @@ public class TokenFunctionViewModel extends BaseViewModel
     private final EthereumNetworkRepositoryType ethereumNetworkRepository;
     private final KeyService keyService;
     private final GenericWalletInteract genericWalletInteract;
-    private final OpenseaService openseaService;
+    private final OpenSeaService openseaService;
     private final FetchTransactionsInteract fetchTransactionsInteract;
     private final AnalyticsServiceType analyticsService;
     private Wallet wallet;
@@ -110,7 +110,7 @@ public class TokenFunctionViewModel extends BaseViewModel
             EthereumNetworkRepositoryType ethereumNetworkRepository,
             KeyService keyService,
             GenericWalletInteract genericWalletInteract,
-            OpenseaService openseaService,
+            OpenSeaService openseaService,
             FetchTransactionsInteract fetchTransactionsInteract,
             AnalyticsServiceType analyticsService)
     {
@@ -147,7 +147,8 @@ public class TokenFunctionViewModel extends BaseViewModel
     public void openUniversalLink(Context context, Token token, List<BigInteger> selection) {
         Intent intent = new Intent(context, SellDetailActivity.class);
         intent.putExtra(C.Key.WALLET, wallet);
-        intent.putExtra(C.Key.TICKET, token);
+        intent.putExtra(C.EXTRA_CHAIN_ID, token.tokenInfo.chainId);
+        intent.putExtra(C.EXTRA_ADDRESS, token.getAddress());
         intent.putExtra(C.EXTRA_TOKENID_LIST, Utils.bigIntListToString(selection, false));
         intent.putExtra(C.EXTRA_STATE, SellDetailActivity.SET_A_PRICE);
         intent.putExtra(C.EXTRA_PRICE, 0);
@@ -160,7 +161,7 @@ public class TokenFunctionViewModel extends BaseViewModel
         super.onCleared();
     }
 
-    public void startGasPriceUpdate(int chainId)
+    public void startGasPriceUpdate(long chainId)
     {
         gasService.startGasPriceCycle(chainId);
     }
@@ -169,7 +170,8 @@ public class TokenFunctionViewModel extends BaseViewModel
     {
         Intent intent = new Intent(ctx, TransferTicketDetailActivity.class);
         intent.putExtra(C.Key.WALLET, wallet);
-        intent.putExtra(C.Key.TICKET, token);
+        intent.putExtra(C.EXTRA_CHAIN_ID, token.tokenInfo.chainId);
+        intent.putExtra(C.EXTRA_ADDRESS, token.getAddress());
 
         intent.putExtra(C.EXTRA_TOKENID_LIST, Utils.bigIntListToString(selection, false));
 
@@ -185,7 +187,8 @@ public class TokenFunctionViewModel extends BaseViewModel
     public void showFunction(Context ctx, Token token, String method, List<BigInteger> tokenIds)
     {
         Intent intent = new Intent(ctx, FunctionActivity.class);
-        intent.putExtra(C.Key.TICKET, token);
+        intent.putExtra(C.EXTRA_CHAIN_ID, token.tokenInfo.chainId);
+        intent.putExtra(C.EXTRA_ADDRESS, token.getAddress());
         intent.putExtra(C.Key.WALLET, wallet);
         intent.putExtra(C.EXTRA_STATE, method);
         if (tokenIds == null) tokenIds = new ArrayList<>(Collections.singletonList(BigInteger.ZERO));
@@ -211,7 +214,7 @@ public class TokenFunctionViewModel extends BaseViewModel
         sig.postValue(failSig);
     }
 
-    public void signMessage(Signable message, DAppFunction dAppFunction, int chainId) {
+    public void signMessage(Signable message, DAppFunction dAppFunction, long chainId) {
         disposable = createTransactionInteract.sign(wallet, message, chainId)
                 .subscribeOn(Schedulers.computation())
                 .observeOn(AndroidSchedulers.mainThread())
@@ -231,13 +234,13 @@ public class TokenFunctionViewModel extends BaseViewModel
 
     public BigInteger calculateMinGasPrice(BigInteger oldGasPrice)
     {
-        BigInteger candidateGasOverridePrice = new BigDecimal(oldGasPrice).multiply(BigDecimal.valueOf(1.1)).setScale(0, RoundingMode.CEILING).toBigInteger();
-        BigInteger checkGasPrice = oldGasPrice.add(BalanceUtils.gweiToWei(BigDecimal.valueOf(2)));
-
-        return checkGasPrice.max(candidateGasOverridePrice); //highest price between adding 2 gwei or 10%
+        //get 0.1GWEI in wei
+        BigInteger zeroPointOneWei = BalanceUtils.gweiToWei(BigDecimal.valueOf(0.1));
+        return new BigDecimal(oldGasPrice).multiply(BigDecimal.valueOf(1.1)).setScale(18, RoundingMode.UP).toBigInteger()
+                .add(zeroPointOneWei);
     }
 
-    public Token getToken(int chainId, String contractAddress)
+    public Token getToken(long chainId, String contractAddress)
     {
         return tokensService.getToken(chainId, contractAddress);
     }
@@ -246,7 +249,8 @@ public class TokenFunctionViewModel extends BaseViewModel
     {
         TicketRangeParcel parcel = new TicketRangeParcel(new TicketRange(idList, token.getAddress(), true));
         Intent intent = new Intent(ctx, RedeemAssetSelectActivity.class);
-        intent.putExtra(C.Key.TICKET, token);
+        intent.putExtra(C.EXTRA_CHAIN_ID, token.tokenInfo.chainId);
+        intent.putExtra(C.EXTRA_ADDRESS, token.getAddress());
         intent.putExtra(C.Key.TICKET_RANGE, parcel);
         intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         ctx.startActivity(intent);
@@ -262,7 +266,7 @@ public class TokenFunctionViewModel extends BaseViewModel
         keyService.getAuthenticationForSignature(wallet, activity, callback);
     }
 
-    public Token getCurrency(int chainId)
+    public Token getCurrency(long chainId)
     {
         return tokensService.getToken(chainId, wallet.address);
     }
@@ -299,7 +303,8 @@ public class TokenFunctionViewModel extends BaseViewModel
     {
         Intent intent = new Intent(ctx, MyAddressActivity.class);
         intent.putExtra(C.Key.WALLET, wallet);
-        intent.putExtra(C.EXTRA_TOKEN_ID, token);
+        intent.putExtra(C.EXTRA_CHAIN_ID, token.tokenInfo.chainId);
+        intent.putExtra(C.EXTRA_ADDRESS, token.getAddress());
         intent.setFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
         ctx.startActivity(intent);
     }
@@ -308,7 +313,8 @@ public class TokenFunctionViewModel extends BaseViewModel
     {
         TicketRangeParcel parcel = new TicketRangeParcel(new TicketRange(idList, token.getAddress(), true));
         Intent intent = new Intent(ctx, RedeemAssetSelectActivity.class);
-        intent.putExtra(C.Key.TICKET, token);
+        intent.putExtra(C.EXTRA_CHAIN_ID, token.tokenInfo.chainId);
+        intent.putExtra(C.EXTRA_ADDRESS, token.getAddress());
         intent.putExtra(C.Key.TICKET_RANGE, parcel);
         intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         ctx.startActivity(intent);
@@ -317,7 +323,8 @@ public class TokenFunctionViewModel extends BaseViewModel
     public void sellTicketRouter(Context context, Token token, List<BigInteger> idList) {
         Intent intent = new Intent(context, SellDetailActivity.class);
         intent.putExtra(C.Key.WALLET, wallet);
-        intent.putExtra(C.Key.TICKET, token);
+        intent.putExtra(C.EXTRA_CHAIN_ID, token.tokenInfo.chainId);
+        intent.putExtra(C.EXTRA_ADDRESS, token.getAddress());
         intent.putExtra(C.EXTRA_TOKENID_LIST, Utils.bigIntListToString(idList, false));
         intent.putExtra(C.EXTRA_STATE, SellDetailActivity.SET_A_PRICE);
         intent.putExtra(C.EXTRA_PRICE, 0);
@@ -460,7 +467,7 @@ public class TokenFunctionViewModel extends BaseViewModel
         if (calcGasCost != null && !calcGasCost.isDisposed()) { calcGasCost.dispose(); }
     }
 
-    public OpenseaService getOpenseaService()
+    public OpenSeaService getOpenseaService()
     {
         return openseaService;
     }
@@ -520,10 +527,9 @@ public class TokenFunctionViewModel extends BaseViewModel
         return fetchTransactionsInteract.fetchTxCompletionTime(wallet.address, txHash);
     }
 
-    public void estimateGasLimit(Web3Transaction w3tx, int chainId)
+    public void estimateGasLimit(Web3Transaction w3tx, long chainId)
     {
-        calcGasCost = gasService.calculateGasEstimate(Numeric.hexStringToByteArray(w3tx.payload), chainId, w3tx.contract.toString(), w3tx.value, wallet)
-                .map(this::convertToGasLimit)
+        calcGasCost = gasService.calculateGasEstimate(Numeric.hexStringToByteArray(w3tx.payload), chainId, w3tx.contract.toString(), w3tx.value, wallet, BigInteger.ZERO)
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(estimate -> buildNewConfirmation(estimate, w3tx),
@@ -535,19 +541,7 @@ public class TokenFunctionViewModel extends BaseViewModel
         gasEstimateComplete.postValue(new Web3Transaction(
                 w3tx.recipient, w3tx.contract, w3tx.value, w3tx.gasPrice, estimate, w3tx.nonce, w3tx.payload, w3tx.description));
     }
-
-    private BigInteger convertToGasLimit(EthEstimateGas estimate)
-    {
-        if (estimate.hasError())
-        {
-            return BigInteger.ZERO;
-        }
-        else
-        {
-            return estimate.getAmountUsed();
-        }
-    }
-
+    
     @Override
     public void showErc20TokenDetail(Activity context, @NotNull String address, String symbol, int decimals, @NotNull Token token)
     {
@@ -558,7 +552,8 @@ public class TokenFunctionViewModel extends BaseViewModel
         intent.putExtra(C.EXTRA_SYMBOL, symbol);
         intent.putExtra(C.EXTRA_DECIMALS, decimals);
         intent.putExtra(C.Key.WALLET, wallet);
-        intent.putExtra(C.EXTRA_TOKEN_ID, token);
+        intent.putExtra(C.EXTRA_ADDRESS, address);
+        intent.putExtra(C.EXTRA_CHAIN_ID, token.tokenInfo.chainId);
         intent.setFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
         intent.putExtra(C.EXTRA_HAS_DEFINITION, hasDefinition);
         context.startActivity(intent);
@@ -568,7 +563,8 @@ public class TokenFunctionViewModel extends BaseViewModel
     public void showTokenList(Activity activity, Token token)
     {
         Intent intent = new Intent(activity, AssetDisplayActivity.class);
-        intent.putExtra(C.Key.TICKET, token);
+        intent.putExtra(C.EXTRA_CHAIN_ID, token.tokenInfo.chainId);
+        intent.putExtra(C.EXTRA_ADDRESS, token.getAddress());
         intent.putExtra(C.Key.WALLET, wallet);
         intent.setFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
         activity.startActivityForResult(intent, C.TERMINATE_ACTIVITY);
@@ -599,7 +595,7 @@ public class TokenFunctionViewModel extends BaseViewModel
         keyService.getAuthenticationForSignature(wallet, activity, callback);
     }
 
-    public void sendTransaction(Web3Transaction finalTx, int chainId, String overridenTxHash)
+    public void sendTransaction(Web3Transaction finalTx, long chainId, String overridenTxHash)
     {
         disposable = createTransactionInteract
                 .createWithSig(wallet, finalTx, chainId)

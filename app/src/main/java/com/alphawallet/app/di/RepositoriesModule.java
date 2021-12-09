@@ -27,9 +27,8 @@ import com.alphawallet.app.service.AssetDefinitionService;
 import com.alphawallet.app.service.GasService;
 import com.alphawallet.app.service.KeyService;
 import com.alphawallet.app.service.KeystoreAccountService;
-import com.alphawallet.app.service.MarketQueueService;
 import com.alphawallet.app.service.NotificationService;
-import com.alphawallet.app.service.OpenseaService;
+import com.alphawallet.app.service.OpenSeaService;
 import com.alphawallet.app.service.RealmManager;
 import com.alphawallet.app.service.TickerService;
 import com.alphawallet.app.service.TokensService;
@@ -65,8 +64,8 @@ public class RepositoriesModule {
 
 	@Singleton
     @Provides
-	TickerService provideTickerService(OkHttpClient httpClient, Gson gson, Context context, TokenLocalSource localSource) {
-		return new TickerService(httpClient, gson, context, localSource);
+	TickerService provideTickerService(OkHttpClient httpClient, PreferenceRepositoryType sharedPrefs, TokenLocalSource localSource) {
+		return new TickerService(httpClient, sharedPrefs, localSource);
     }
 
 	@Singleton
@@ -156,11 +155,10 @@ public class RepositoriesModule {
 	@Provides
 	TokensService provideTokensService(EthereumNetworkRepositoryType ethereumNetworkRepository,
 									   TokenRepositoryType tokenRepository,
-									   Context context,
 									   TickerService tickerService,
-									   OpenseaService openseaService,
+									   OpenSeaService openseaService,
 									   AnalyticsServiceType analyticsService) {
-		return new TokensService(ethereumNetworkRepository, tokenRepository, context, tickerService, openseaService, analyticsService);
+		return new TokensService(ethereumNetworkRepository, tokenRepository, tickerService, openseaService, analyticsService);
 	}
 
 	@Singleton
@@ -180,15 +178,8 @@ public class RepositoriesModule {
 
 	@Singleton
 	@Provides
-    MarketQueueService provideMarketQueueService(Context ctx, OkHttpClient okHttpClient,
-                                                 TransactionRepositoryType transactionRepository) {
-		return new MarketQueueService(ctx, okHttpClient, transactionRepository);
-	}
-
-	@Singleton
-	@Provides
-    OpenseaService provideOpenseaService(Context ctx) {
-		return new OpenseaService(ctx);
+	OpenSeaService provideOpenseaService() {
+		return new OpenSeaService();
 	}
 
 	@Singleton
@@ -208,15 +199,15 @@ public class RepositoriesModule {
 	@Singleton
 	@Provides
     AssetDefinitionService provideAssetDefinitionService(OkHttpClient okHttpClient, Context ctx, NotificationService notificationService, RealmManager realmManager,
-														 EthereumNetworkRepositoryType ethereumNetworkRepository, TokensService tokensService,
-														 TokenLocalSource tls, TransactionRepositoryType trt, AlphaWalletService alphaService) {
-		return new AssetDefinitionService(okHttpClient, ctx, notificationService, realmManager, ethereumNetworkRepository, tokensService, tls, trt, alphaService);
+														 TokensService tokensService, TokenLocalSource tls, TransactionRepositoryType trt,
+														 AlphaWalletService alphaService) {
+		return new AssetDefinitionService(okHttpClient, ctx, notificationService, realmManager, tokensService, tls, trt, alphaService);
 	}
 
 	@Singleton
 	@Provides
-	KeyService provideKeyService(Context ctx) {
-		return new KeyService(ctx);
+	KeyService provideKeyService(Context ctx, AnalyticsServiceType analyticsService) {
+		return new KeyService(ctx, analyticsService);
 	}
 
 	@Singleton
